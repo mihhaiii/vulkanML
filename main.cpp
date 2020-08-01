@@ -152,7 +152,7 @@ void test_operator_relu()
 	std::vector<float> output(numInputs);
 	vulkan_operator_relu(&input[0], &output[0], numInputs);
 	for (int i = 0; i < numInputs; i++) {
-		if (abs(output[i] - max(0.f, input[i])) > 0.1) {
+		if (abs(output[i] - std::max(0.f, input[i])) > 0.1) {
 			std::cout << "error: relu produces different results with Vulkan and cpu\n";
 		}
 	}

@@ -96,9 +96,6 @@ add_dependencies(vulkanML relu_shader)
 add_dependencies(vulkanML conv2d_shader)
 add_dependencies(vulkanML max_pool_shader)
 
-
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Data"
-     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 	 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/trainingSample"
      DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
