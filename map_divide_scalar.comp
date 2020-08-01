@@ -1,0 +1,20 @@
+#version 440
+
+layout(local_size_x_id = 0) in;             // workgroup size set with specialization constant
+layout(push_constant) uniform Parameters {  // push constants
+	int numInputs;
+	float scalar;
+} params;
+
+layout(std430, binding = 0) buffer lay0 { float inputs[]; }; // array parameters
+layout(std430, binding = 1) buffer lay1 { float outputs[]; }; // array parameters
+
+void main(){
+   const uint globalId = gl_GlobalInvocationID.x; 
+   
+   if(globalId >= params.numInputs){
+      return;
+   }
+   
+   outputs[globalId] = inputs[globalId] / params.scalar;
+}

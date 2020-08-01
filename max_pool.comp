@@ -1,0 +1,45 @@
+#version 440
+
+layout(local_size_x_id = 0) in; // workgroup dimensions specialization constants
+layout(push_constant) uniform Parameters {  // push constants
+	int height; int width; int channels; int kernelHeight; int kernelWidth;
+} params;
+
+layout(std430, binding = 0) buffer lay0 { float inputImage[]; }; // array parameters
+layout(std430, binding = 1) buffer lay1 { float outputImage[]; }; // array parameters
+
+void main(){
+   const uint c = gl_GlobalInvocationID.x; 
+   if(c >= params.channels){
+      return;
+   }
+  
+   const int height = params.height;
+   const int width = params.width;
+   const int channels = params.channels;
+   const int kernelHeight = params.kernelHeight;
+   const int kernelWidth = params.kernelWidth;
+   
+   
+    // input image is flattened version of   height x width x channels
+	// output image is flattened version of (height / kernelHeight) x (width / kernelWidth) x channels,
+	int outWidth = width / kernelWidth;
+	int outHeight = height / kernelHeight;
+	
+	for (int i = 0; i < outHeight; i++) {
+		for (int j = 0; j < outWidth; j++) {
+			int startI = i * kernelHeight;
+			int startJ = j * kernelWidth;
+			float maxValue = inputImage[startI*width*channels + startJ*channels + c];
+			for (int ii = startI; ii < startI + kernelHeight; ii++) {
+				for (int jj = startJ; jj < startJ + kernelWidth; jj++) {
+					float currentValue = inputImage[ii*width*channels + jj*channels + c]; 
+					if (currentValue > maxValue)
+						maxValue = currentValue;
+				}
+			}
+			outputImage[i*outWidth*channels + j*channels + c] = maxValue;
+		}
+	}
+}
+

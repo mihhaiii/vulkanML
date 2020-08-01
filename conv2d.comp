@@ -1,0 +1,46 @@
+#version 440
+
+layout(local_size_x_id = 0) in; // workgroup dimensions specialization constants
+layout(push_constant) uniform Parameters {  // push constants
+	int height; int width; int channels; int kernelHeight; int kernelWidth; int numOutputChannels;
+} params;
+
+layout(std430, binding = 0) buffer lay0 { float inputImage[]; }; // array parameters
+layout(std430, binding = 1) buffer lay1 { float kernels[]; }; // array parameters
+layout(std430, binding = 2) buffer lay2 { float kernelBiases[]; }; // array parameters
+layout(std430, binding = 3) buffer lay3 { float outputImage[]; }; // array parameters
+
+void main(){
+  // const uint i = gl_GlobalInvocationID.x; 
+  // const uint j = gl_GlobalInvocationID.y; 
+   const uint outputChannel = gl_GlobalInvocationID.x; 
+   if(/*i >= params.height - params.kernelHeight + 1 || j >= params.width - params.kernelWidth + 1 || */outputChannel >= params.numOutputChannels){
+      return;
+   }
+  
+   const int height = params.height;
+   const int width = params.width;
+   const int channels = params.channels;
+   const int kernelHeight = params.kernelHeight;
+   const int kernelWidth = params.kernelWidth;
+   const int numOutputChannels = params.numOutputChannels;
+  
+  for (int i = 0; i < height - kernelHeight + 1; i++) {
+			for (int j = 0; j < width - kernelWidth + 1; j++) {
+				   float res = kernelBiases[outputChannel];
+				   for (int kI = 0; kI < kernelHeight; kI++) {
+						for (int kJ = 0; kJ < kernelWidth; kJ++) {
+							for (int c = 0; c < channels; c++) {
+								float imageValue = inputImage[(i+kI)*width*channels+(j+kJ)*channels+c]; // [i + kI][j + kJ][c];
+								float kernelValue = kernels[kI*kernelWidth*channels*numOutputChannels + 
+									kJ*channels*numOutputChannels + c*numOutputChannels + outputChannel]; // [kI][kJ][c][outputChannel];
+								res += imageValue * kernelValue;
+							}
+						}
+				   }
+				   res = max(res, 0); // apply relu by default
+				   outputImage[i*(width-kernelWidth+1)*numOutputChannels+j*numOutputChannels+outputChannel] = res; // outputImage[i][j][outputChannel]
+		}
+   }
+}
+

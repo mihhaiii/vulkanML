@@ -1,0 +1,31 @@
+#version 440
+
+layout(local_size_x_id = 0) in;             // workgroup size set with specialization constant
+layout(push_constant) uniform Parameters {  // push constants
+	int numInputs;
+} params;
+
+layout(std430, binding = 0) buffer lay0 { float inputs[]; }; // array parameters
+layout(std430, binding = 1) buffer lay1 { float maxPerGroup[]; }; // array parameters
+
+void main(){
+   const uint globalId = gl_GlobalInvocationID.x; 
+   const uint localId = gl_LocalInvocationID.x;
+   const uint groupSize = gl_WorkGroupSize.x;
+   const uint groupId = gl_WorkGroupID.x;
+   
+   if(globalId >= params.numInputs){
+      inputs[globalId] = 0; // pad the last group of the input array with 0
+   }
+   
+   for (uint v = groupSize; v >= 1; v /= 2){
+		if (localId < v)
+			inputs[globalId] += inputs[globalId + v];
+		
+		barrier();
+   }
+   
+   if (localId == 0){
+		maxPerGroup[groupId] = inputs[globalId];
+   }
+}
