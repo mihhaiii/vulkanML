@@ -3,42 +3,9 @@ project(vulkanML)
 
 find_package(Vuh REQUIRED)
 
-# compile shaders
-vuh_compile_shader(FC_shader
-   SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/FC.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/FC.spv
-)
-vuh_compile_shader(reduce_max_shader
-   SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/reduce_max.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/reduce_max.spv
-)
-vuh_compile_shader(reduce_sum_shader
-   SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/reduce_sum.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/reduce_sum.spv
-)
-vuh_compile_shader(map_add_shader
-   SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/map_add_scalar.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/map_add_scalar.spv
-)
-vuh_compile_shader(map_divide_shader
-   SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/map_divide_scalar.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/map_divide_scalar.spv
-)
-vuh_compile_shader(map_exp_shader
-   SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/map_exp.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/map_exp.spv
-)
-vuh_compile_shader(relu_shader
-   SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/relu.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/relu.spv
-)
-vuh_compile_shader(conv2d_shader
-   SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/conv2d.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/conv2d.spv
-)
-vuh_compile_shader(max_pool_shader
-   SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/max_pool.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/max_pool.spv
+
+file(GLOB SHADERS
+    "shaders/*.comp"
 )
 	
 file(GLOB SOURCE
@@ -49,22 +16,25 @@ file (GLOB HEADERS
 	"include/*.h"
 
 )
+
+MESSAGE("Creating the executable project vulkanML")
 add_executable(vulkanML ${SOURCE} ${HEADERS})
+target_include_directories(vulkanML PRIVATE "include/")
 
 target_link_libraries(vulkanML PUBLIC vuh::vuh)
 
-# add shadere dependencies
-add_dependencies(vulkanML FC_shader)
-add_dependencies(vulkanML reduce_max_shader)
-add_dependencies(vulkanML reduce_sum_shader)
-add_dependencies(vulkanML map_add_shader)
-add_dependencies(vulkanML map_divide_shader)
-add_dependencies(vulkanML map_exp_shader)
-add_dependencies(vulkanML relu_shader)
-add_dependencies(vulkanML conv2d_shader)
-add_dependencies(vulkanML max_pool_shader)
-
-	 
+# compile shaders and add dependencies
+FOREACH (shader_file ${SHADERS})
+	get_filename_component(shader_name ${shader_file} NAME_WE)
+	MESSAGE("Compiling shader ${shader_name}")
+	vuh_compile_shader("${shader_name}_shader"
+		SOURCE ${shader_file}
+		TARGET ${CMAKE_CURRENT_BINARY_DIR}/${shader_name}.spv
+	)
+	add_dependencies(vulkanML "${shader_name}_shader")
+ENDFOREACH()
+	
+MESSAGE("Copying tre-trained weights to the binaries directory")
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/trainingSample"
      DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
