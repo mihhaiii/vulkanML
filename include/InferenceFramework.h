@@ -9,6 +9,7 @@
 #include "vulkan_operator_maxpool.h"
 #include "operator_conv2d_cpu.h"
 #include "vulkan_operator_conv2d.h"
+#include "vulkan_operator_relu.h"
 
 using Shape = std::vector<int>;
 
@@ -79,7 +80,8 @@ public:
 	float* getDataFromDeviceData() {
 		if (!m_data)
 			m_data = new float[m_size];
-		m_deviceData->toHost(m_data); return m_data;
+		m_deviceData->toHost(m_data);
+		return m_data;
 	}
 	int getSize() { return m_size; }
 	Shape getShape() { return m_shape; }
@@ -293,6 +295,29 @@ private:
 	EnumDevice m_device;
 };
 
+class ReLULayer : public Layer
+{
+public:
+	ReLULayer(Tensor* input, EnumDevice device)
+		: m_input(input), m_device(device) {}
+
+	virtual void forward() {
+		if (m_device == EnumDevice::DEVICE_CPU) {
+			for (int i = 0; i < m_input->getSize(); i++) {
+				m_input->getData()[i] = std::max(m_input->getData()[i], 0.f);
+			}
+		}
+		else if (m_device == EnumDevice::DEVICE_VULKAN) {
+			vulkan_operator_relu(m_input->getDeviceData(), m_input->getDeviceData(), m_input->getSize());
+		}
+	}
+	Tensor* getOutputTensor() { return m_input; }
+
+private:
+	Tensor* m_input;
+	EnumDevice m_device;
+};
+
 class Model
 {
 public:
@@ -328,6 +353,18 @@ public:
 		if (weigthsFile) layer->readWeights(weigthsFile);
 		if (biasesFile) layer->readBiases(biasesFile);
 		return layer;
+	}
+
+	ReLULayer* addReLULayer() {
+		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
+		ReLULayer* layer = new ReLULayer(prevLayerOutput, m_device);
+		m_layers.push_back(layer);
+		return layer;
+	}
+
+	float* getOutputData() {
+		Tensor* outputTensor = m_layers.back()->getOutputTensor();
+		return m_device == DEVICE_CPU ? outputTensor->getData() : outputTensor->getDataFromDeviceData();
 	}
 
 	void run() {

@@ -26,7 +26,6 @@ void operator_conv2d_cpu(float * inputImage, int height, int width, int channels
 						}
 					}
 				}
-				res = std::max(res, 0.f);
 				outputImage[i*(width-kernelWidth+1)*numOutputChannels+j*numOutputChannels+outputChannel] = res; // outputImage[i][j][outputChannel]
 			}
 		}

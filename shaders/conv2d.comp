@@ -38,7 +38,6 @@ void main(){
 							}
 						}
 				   }
-				   res = max(res, 0); // apply relu by default
 				   outputImage[i*(width-kernelWidth+1)*numOutputChannels+j*numOutputChannels+outputChannel] = res; // outputImage[i][j][outputChannel]
 		}
    }

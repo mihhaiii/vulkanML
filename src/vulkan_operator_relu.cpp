@@ -8,12 +8,6 @@
 
 void vulkan_operator_relu(float * inputs, float * outputs, int numInputs, float * outTime)
 {
-	/*auto instance = vuh::Instance();
-	auto devices = instance.devices();
-	auto it_discrete = std::find_if(begin(devices), end(devices), [&](const auto& d) { return
-		d.properties().deviceType == vk::PhysicalDeviceType::eDiscreteGpu;
-	});
-	auto device = it_discrete != end(devices) ? *it_discrete : devices.at(0);*/
 	auto device = InstanceManger::getInstance().getDefaultDevice();
 	using Specs = vuh::typelist<uint32_t>;
 	struct Params { int numInputs; };
@@ -27,4 +21,16 @@ void vulkan_operator_relu(float * inputs, float * outputs, int numInputs, float 
 	auto program = vuh::Program<Specs, Params>(device, "relu.spv");
 	program.grid(numGroups).spec(groupSize)({ numInputs }, d_inputs, d_outputs);
 	d_outputs.toHost(outputs);
+}
+
+void vulkan_operator_relu(vuh::Array<float>* inputs, vuh::Array<float>* outputs, int numInputs, float* outTime)
+{
+	auto device = InstanceManger::getInstance().getDefaultDevice();
+	using Specs = vuh::typelist<uint32_t>;
+	struct Params { int numInputs; };
+	const int groupSize = 1024;
+	const int numGroups = (numInputs + groupSize - 1) / groupSize;
+
+	auto program = vuh::Program<Specs, Params>(device, "relu.spv");
+	program.grid(numGroups).spec(groupSize)({ numInputs }, *inputs, *outputs);
 }

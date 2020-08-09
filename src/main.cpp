@@ -361,39 +361,33 @@ void test_conv_net()
 
 void test_conv_net1()
 {
-	Model m(EnumDevice::DEVICE_VULKAN);
+	Model m(EnumDevice::DEVICE_CPU);
 
 	int h, w, c;
-	std::vector<float> img = loadImage("trainingSample/3/img_9.jpg",h,w,c);
+	std::vector<float> img = loadImage("trainingSample/9/img_11.jpg",h,w,c);
 	InputLayer* inputLayer = m.addInputLayer({ 28,28,1 });
 	inputLayer->fill(img);
 
 	m.addConv2dLayer(32, 3, 3, "conv_mnist/layer_0_weights", "conv_mnist/layer_0_biases");
-
+	m.addReLULayer();
 	m.addMaxPooling2dLayer(2, 2);
 
 	m.addConv2dLayer(64, 3, 3, "conv_mnist/layer_1_weights", "conv_mnist/layer_1_biases");
-
+	m.addReLULayer();
 	m.addMaxPooling2dLayer(2, 2);
 
 	m.addConv2dLayer(64, 3, 3, "conv_mnist/layer_2_weights", "conv_mnist/layer_2_biases");
+	m.addReLULayer();
 
-	FCLayer* l1 = m.addFCLayer(64, true, "conv_mnist/layer_3_weights", "conv_mnist/layer_3_biases");
+	m.addFCLayer(64, true, "conv_mnist/layer_3_weights", "conv_mnist/layer_3_biases");
+	m.addFCLayer(10, false, "conv_mnist/layer_4_weights", "conv_mnist/layer_4_biases");
 
-	Layer* lastLayer = m.addFCLayer(10, false, "conv_mnist/layer_4_weights", "conv_mnist/layer_4_biases");
-
+	m.run();
 	clock_t start = clock();
 	m.run();
 	float time = (float)(clock() - start) / CLOCKS_PER_SEC;
 
-	/*std::ofstream outF("out2.txt");
-	outF << lastLayer->getOutputTensor()->getSize() << '\n';
-	for (int i = 0; i < lastLayer->getOutputTensor()->getSize(); i++) {
-		outF << lastLayer->getOutputTensor()->getData()[i] << ' ';
-	}*/
-
-	float* output = lastLayer->getOutputTensor()->getDataFromDeviceData();
-	//float* output = lastLayer->getOutputTensor()->getData();
+	float* output = m.getOutputData();
 	operator_softmax_cpu(output, output, 10);
 	auto itMax = std::max_element(output, output + 10);
 	int digit = itMax - output;
