@@ -10,6 +10,7 @@
 #include "operator_conv2d_cpu.h"
 #include "vulkan_operator_conv2d.h"
 #include "vulkan_operator_relu.h"
+#include <iostream>
 
 using Shape = std::vector<int>;
 
@@ -322,12 +323,14 @@ class Model
 {
 public:
 	Model(EnumDevice device)
-	 : m_device(device)
+	 : m_device(device),
+		numConv(0), numFC(0), numRELU(0), numMaxPool(0)
 	{
 	}
 
 	InputLayer* addInputLayer(const Shape& shape, const char* binFile = nullptr) {
 		m_layers.push_back(new InputLayer(shape, m_device, binFile));
+		m_layerNames.push_back("input");
 		return (InputLayer*)m_layers.back();
 	}
 
@@ -337,12 +340,14 @@ public:
 		m_layers.push_back(layer);
 		if (weigthsFile) layer->readWeights(weigthsFile);
 		if (biasesFile) layer->readBiases(biasesFile);
+		m_layerNames.push_back("conv_" + std::to_string(numConv++));
 		return layer;
 	}
 
 	MaxPooling2dLayer* addMaxPooling2dLayer(int kH, int kW) {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
 		m_layers.push_back(new MaxPooling2dLayer(kH, kW, prevLayerOutput, m_device));
+		m_layerNames.push_back("max_pool_" + std::to_string(numMaxPool++));
 		return (MaxPooling2dLayer*)m_layers.back();
 	}
 
@@ -352,6 +357,7 @@ public:
 		m_layers.push_back(layer);
 		if (weigthsFile) layer->readWeights(weigthsFile);
 		if (biasesFile) layer->readBiases(biasesFile);
+		m_layerNames.push_back("fc_" + std::to_string(numFC++));
 		return layer;
 	}
 
@@ -359,6 +365,7 @@ public:
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
 		ReLULayer* layer = new ReLULayer(prevLayerOutput, m_device);
 		m_layers.push_back(layer);
+		m_layerNames.push_back("relu_" + std::to_string(numRELU++));
 		return layer;
 	}
 
@@ -370,7 +377,13 @@ public:
 	void run() {
 		// skip the first layer which is the input layer
 		for (int i = 1; i < m_layers.size(); i++) {
+#ifndef NDEBUG
+			clock_t start = clock();
+#endif
 			m_layers[i]->forward();
+#ifndef NDEBUG
+			std::cout << m_layerNames[i] << ": " << (float)(clock() - start) / CLOCKS_PER_SEC << std::endl;
+#endif
 		}
 	}
 
@@ -383,4 +396,7 @@ public:
 private:
 	std::vector<Layer*> m_layers;
 	EnumDevice m_device;
+
+	int numConv, numFC, numRELU, numMaxPool;
+	std::vector<std::string> m_layerNames;
 };

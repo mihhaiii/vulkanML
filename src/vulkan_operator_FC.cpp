@@ -45,7 +45,7 @@ void vulkan_operator_FC(vuh::Array<float>* inputs, vuh::Array<float>* weigths, v
 	const int groupSize = 128;
 	const int numGroups = (numOutputs + groupSize - 1) / groupSize;
 
-	auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), "FC.spv");
+	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), "FC.spv");
 
 	clock_t start = clock(); // measure only execution time, without data transfer
 	program.grid(numGroups).spec(groupSize)({ numInputs, numOutputs, applyRelu }, *inputs, *weigths, *biases, *outputs);

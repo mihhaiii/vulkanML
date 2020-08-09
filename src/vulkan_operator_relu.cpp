@@ -30,6 +30,6 @@ void vulkan_operator_relu(vuh::Array<float>* inputs, vuh::Array<float>* outputs,
 	const int groupSize = 1024;
 	const int numGroups = (numInputs + groupSize - 1) / groupSize;
 
-	auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), "relu.spv");
+	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), "relu.spv");
 	program.grid(numGroups).spec(groupSize)({ numInputs }, *inputs, *outputs);
 }
