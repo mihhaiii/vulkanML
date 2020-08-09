@@ -23,6 +23,10 @@ target_include_directories(vulkanML PRIVATE "include/")
 
 target_link_libraries(vulkanML PUBLIC vuh::vuh)
 
+if(WIN32)
+    set_target_properties(vulkanML PROPERTIES COMPILE_DEFINITIONS NOMINMAX)
+endif()
+
 # compile shaders and add dependencies
 FOREACH (shader_file ${SHADERS})
 	get_filename_component(shader_name ${shader_file} NAME_WE)

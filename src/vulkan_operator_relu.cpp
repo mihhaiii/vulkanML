@@ -25,12 +25,11 @@ void vulkan_operator_relu(float * inputs, float * outputs, int numInputs, float 
 
 void vulkan_operator_relu(vuh::Array<float>* inputs, vuh::Array<float>* outputs, int numInputs, float* outTime)
 {
-	auto device = InstanceManger::getInstance().getDefaultDevice();
 	using Specs = vuh::typelist<uint32_t>;
 	struct Params { int numInputs; };
 	const int groupSize = 1024;
 	const int numGroups = (numInputs + groupSize - 1) / groupSize;
 
-	auto program = vuh::Program<Specs, Params>(device, "relu.spv");
+	auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), "relu.spv");
 	program.grid(numGroups).spec(groupSize)({ numInputs }, *inputs, *outputs);
 }
