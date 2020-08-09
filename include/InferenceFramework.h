@@ -11,6 +11,7 @@
 #include "vulkan_operator_conv2d.h"
 #include "vulkan_operator_relu.h"
 #include <iostream>
+#include "vulkan_operator_leaky_relu.h"
 
 using Shape = std::vector<int>;
 
@@ -319,12 +320,36 @@ private:
 	EnumDevice m_device;
 };
 
+
+class LeakyReLULayer : public Layer
+{
+public:
+	LeakyReLULayer(Tensor* input, EnumDevice device)
+		: m_input(input), m_device(device) {}
+
+	virtual void forward() {
+		if (m_device == EnumDevice::DEVICE_CPU) {
+			for (int i = 0; i < m_input->getSize(); i++) {
+				m_input->getData()[i] = (m_input->getData()[i] < 0 ? 0.1 : 1) * m_input->getData()[i];
+			}
+		}
+		else if (m_device == EnumDevice::DEVICE_VULKAN) {
+			vulkan_operator_leaky_relu(m_input->getDeviceData(), m_input->getDeviceData(), m_input->getSize());
+		}
+	}
+	Tensor* getOutputTensor() { return m_input; }
+
+private:
+	Tensor* m_input;
+	EnumDevice m_device;
+};
+
 class Model
 {
 public:
 	Model(EnumDevice device)
 	 : m_device(device),
-		numConv(0), numFC(0), numRELU(0), numMaxPool(0)
+		numConv(0), numFC(0), numRELU(0), numMaxPool(0), numLeakyRELU(0)
 	{
 	}
 
@@ -368,6 +393,14 @@ public:
 		m_layerNames.push_back("relu_" + std::to_string(numRELU++));
 		return layer;
 	}
+	
+	LeakyReLULayer* addLeakyReLULayer() {
+		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
+		LeakyReLULayer* layer = new LeakyReLULayer(prevLayerOutput, m_device);
+		m_layers.push_back(layer);
+		m_layerNames.push_back("leaky_relu_" + std::to_string(numLeakyRELU++));
+		return layer;
+	}
 
 	float* getOutputData() {
 		Tensor* outputTensor = m_layers.back()->getOutputTensor();
@@ -397,6 +430,6 @@ private:
 	std::vector<Layer*> m_layers;
 	EnumDevice m_device;
 
-	int numConv, numFC, numRELU, numMaxPool;
+	int numConv, numFC, numRELU, numMaxPool, numLeakyRELU;
 	std::vector<std::string> m_layerNames;
 };
