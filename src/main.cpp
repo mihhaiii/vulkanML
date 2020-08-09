@@ -364,7 +364,7 @@ void test_conv_net1()
 	Model m(EnumDevice::DEVICE_VULKAN);
 
 	int h, w, c;
-	std::vector<float> img = loadImage("trainingSample/7/img_29.jpg",h,w,c);
+	std::vector<float> img = loadImage("trainingSample/3/img_9.jpg",h,w,c);
 	InputLayer* inputLayer = m.addInputLayer({ 28,28,1 });
 	inputLayer->fill(img);
 

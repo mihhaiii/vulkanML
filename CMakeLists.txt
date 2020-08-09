@@ -40,47 +40,15 @@ vuh_compile_shader(max_pool_shader
    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/max_pool.comp
    TARGET ${CMAKE_CURRENT_BINARY_DIR}/max_pool.spv
 )
-
-SET(SOURCE
-	main.cpp
-	vulkan_operator_FC.cpp
-	operator_FC_cpu.cpp
-	operator_softmax_cpu.cpp
-	vulkan_operator_softmax.cpp
-	vulkan_operator_reduce_max.cpp
-	vulkan_operator_reduce_sum.cpp
-	vulkan_operator_map_exp.cpp
-	vulkan_operator_map_add.cpp
-	vulkan_operator_map_div.cpp
-	vulkan_operator_relu.cpp
-	operator_conv2d_cpu.cpp
-	operator_maxpool_cpu.cpp
-	test_conv_operators.cpp
-	vulkan_operator_conv2d.cpp
-	vulkan_operator_max_pool.cpp
-	vulkan_operator_maxpool.cpp)
 	
-SET(HEADERS
-	vulkan_operator_FC.h
-	operator_FC_cpu.h
-	operator_softmax_cpu.h
-	vulkan_operator_softmax.h
-	vulkan_operator_reduce_max.h
-	vulkan_operator_reduce_sum.h
-	vulkan_operator_map_exp.h
-	vulkan_operator_map_add.h
-	vulkan_operator_map_div.h
-	vulkan_operator_relu.h
-	operator_conv2d_cpu.h
-	operator_maxpool_cpu.h
-	test_conv_operators.h
-	vulkan_operator_conv2d.h
-	vulkan_operator_max_pool.h
-	vulkan_operator_maxpool.h
-	InstanceManager.h
-	InferenceFramework.h
-	stb_image.h)
+file(GLOB SOURCE
+    "src/*.cpp"
+)
 
+file (GLOB HEADERS
+	"include/*.h"
+
+)
 add_executable(vulkanML ${SOURCE} ${HEADERS})
 
 target_link_libraries(vulkanML PUBLIC vuh::vuh)
