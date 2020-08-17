@@ -285,86 +285,86 @@ void test_mnist_simple()
 	std::cout << "Digit is " << digit << " with probability " << prob << '\n';
 }
 
-void test_conv_net()
-{
-	// layers as follows:
-	// layer 0:  conv, weights 3x3x1x32 biases 32
-	// layer :   max pool 2x2
-	// layer 1:  conv, weights 3x3x32x64 biases 64
-	// layer :   max pool 2x2
-	// layer 2:  conv weights 3x3x64x64 biases  64
-	// layer 3:  fc   weights 576x64    biases  64
-	// layer 4:  fc   weights 64x10		biases  10
-	std::vector<float> conv0_w(3 * 3 * 32);
-	std::vector<float> conv0_b(32);
-	std::vector<float> conv1_w(3 * 3 * 32 * 64);
-	std::vector<float> conv1_b(64);
-	std::vector<float> conv2_w(3 * 3 * 64 * 64);
-	std::vector<float> conv2_b(64);
-	std::vector<float> fc0_w(576 * 64);
-	std::vector<float> fc0_b(64);
-	std::vector<float> fc1_w(64 * 10);
-	std::vector<float> fc1_b(10);
-	readBinFile("conv_mnist/layer_0_weights", conv0_w);
-	readBinFile("conv_mnist/layer_0_biases", conv0_b);
-	readBinFile("conv_mnist/layer_1_weights", conv1_w);
-	readBinFile("conv_mnist/layer_1_biases", conv1_b);
-	readBinFile("conv_mnist/layer_2_weights", conv2_w);
-	readBinFile("conv_mnist/layer_2_biases", conv2_b);
-	readBinFile("conv_mnist/layer_3_weights", fc0_w);
-	readBinFile("conv_mnist/layer_3_biases", fc0_b);
-	readBinFile("conv_mnist/layer_4_weights", fc1_w);
-	readBinFile("conv_mnist/layer_4_biases", fc1_b);
-	
-	int width, height, channels;
-	std::vector<float> img = loadImage("trainingSample/2/img_73.jpg", width, height, channels);
-
-	std::vector<float> tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
-	tmp1.resize(26*26*32);
-	tmp2.resize(13 * 13 * 32);
-	tmp3.resize(11 * 11 * 64);
-	tmp4.resize(5 * 5 * 64);
-	tmp5.resize(3 * 3 * 64);
-	tmp6.resize(64);
-	tmp7.resize(10);
-
-	vulkan_operator_conv2d(&img[0], height, width, channels, &conv0_w[0], 3, 3, &conv0_b[0], &tmp1[0], 32);
-	//vulkan_operator_relu(&tmp1[0], &tmp1[0], tmp1.size());
-	vulkan_operator_maxpool(&tmp1[0], 26, 26, 32, 2, 2, &tmp2[0]);
-
-	vulkan_operator_conv2d(&tmp2[0], 13, 13, 32, &conv1_w[0], 3, 3, &conv1_b[0], &tmp3[0], 64);
-	//vulkan_operator_relu(&tmp3[0], &tmp3[0], tmp3.size());
-	vulkan_operator_maxpool(&tmp3[0], 11, 11, 64, 2, 2, &tmp4[0]);
-
-	vulkan_operator_conv2d(&tmp4[0], 5, 5, 64, &conv2_w[0], 3, 3, &conv2_b[0], &tmp5[0], 64);
-	//vulkan_operator_relu(&tmp5[0], &tmp5[0], tmp5.size());
-
-	vulkan_operator_FC(&tmp5[0], &fc0_w[0], &fc0_b[0], &tmp6[0], tmp5.size(), tmp6.size(), true/*apply relu*/);
-	//vulkan_operator_relu(&tmp6[0], &tmp6[0], tmp6.size());
-
-
-	vulkan_operator_FC(&tmp6[0], &fc1_w[0], &fc1_b[0], &tmp7[0], tmp6.size(), tmp7.size());
-
-	std::ofstream outF("out1.txt");
-	outF << tmp7.size() << '\n';
-	for (int i = 0; i < tmp7.size(); i++) {
-		outF << tmp7[i] << ' ';
-	}
-
-
-	operator_softmax_cpu(&tmp7[0], &tmp7[0], tmp7.size());
-	auto itMax = std::max_element(tmp7.begin(), tmp7.end());
-	int digit = itMax - tmp7.begin();
-	float prob = *itMax;
-	std::cout << "Digit is " << digit << " with probability " << prob << '\n';
-}
+//void test_conv_net()
+//{
+//	// layers as follows:
+//	// layer 0:  conv, weights 3x3x1x32 biases 32
+//	// layer :   max pool 2x2
+//	// layer 1:  conv, weights 3x3x32x64 biases 64
+//	// layer :   max pool 2x2
+//	// layer 2:  conv weights 3x3x64x64 biases  64
+//	// layer 3:  fc   weights 576x64    biases  64
+//	// layer 4:  fc   weights 64x10		biases  10
+//	std::vector<float> conv0_w(3 * 3 * 32);
+//	std::vector<float> conv0_b(32);
+//	std::vector<float> conv1_w(3 * 3 * 32 * 64);
+//	std::vector<float> conv1_b(64);
+//	std::vector<float> conv2_w(3 * 3 * 64 * 64);
+//	std::vector<float> conv2_b(64);
+//	std::vector<float> fc0_w(576 * 64);
+//	std::vector<float> fc0_b(64);
+//	std::vector<float> fc1_w(64 * 10);
+//	std::vector<float> fc1_b(10);
+//	readBinFile("conv_mnist/layer_0_weights", conv0_w);
+//	readBinFile("conv_mnist/layer_0_biases", conv0_b);
+//	readBinFile("conv_mnist/layer_1_weights", conv1_w);
+//	readBinFile("conv_mnist/layer_1_biases", conv1_b);
+//	readBinFile("conv_mnist/layer_2_weights", conv2_w);
+//	readBinFile("conv_mnist/layer_2_biases", conv2_b);
+//	readBinFile("conv_mnist/layer_3_weights", fc0_w);
+//	readBinFile("conv_mnist/layer_3_biases", fc0_b);
+//	readBinFile("conv_mnist/layer_4_weights", fc1_w);
+//	readBinFile("conv_mnist/layer_4_biases", fc1_b);
+//	
+//	int width, height, channels;
+//	std::vector<float> img = loadImage("trainingSample/2/img_73.jpg", width, height, channels);
+//
+//	std::vector<float> tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
+//	tmp1.resize(26*26*32);
+//	tmp2.resize(13 * 13 * 32);
+//	tmp3.resize(11 * 11 * 64);
+//	tmp4.resize(5 * 5 * 64);
+//	tmp5.resize(3 * 3 * 64);
+//	tmp6.resize(64);
+//	tmp7.resize(10);
+//
+//	vulkan_operator_conv2d(&img[0], height, width, channels, &conv0_w[0], 3, 3, &conv0_b[0], &tmp1[0], 32);
+//	//vulkan_operator_relu(&tmp1[0], &tmp1[0], tmp1.size());
+//	vulkan_operator_maxpool(&tmp1[0], 26, 26, 32, 2, 2, &tmp2[0]);
+//
+//	vulkan_operator_conv2d(&tmp2[0], 13, 13, 32, &conv1_w[0], 3, 3, &conv1_b[0], &tmp3[0], 64);
+//	//vulkan_operator_relu(&tmp3[0], &tmp3[0], tmp3.size());
+//	vulkan_operator_maxpool(&tmp3[0], 11, 11, 64, 2, 2, &tmp4[0]);
+//
+//	vulkan_operator_conv2d(&tmp4[0], 5, 5, 64, &conv2_w[0], 3, 3, &conv2_b[0], &tmp5[0], 64);
+//	//vulkan_operator_relu(&tmp5[0], &tmp5[0], tmp5.size());
+//
+//	vulkan_operator_FC(&tmp5[0], &fc0_w[0], &fc0_b[0], &tmp6[0], tmp5.size(), tmp6.size(), true/*apply relu*/);
+//	//vulkan_operator_relu(&tmp6[0], &tmp6[0], tmp6.size());
+//
+//
+//	vulkan_operator_FC(&tmp6[0], &fc1_w[0], &fc1_b[0], &tmp7[0], tmp6.size(), tmp7.size());
+//
+//	std::ofstream outF("out1.txt");
+//	outF << tmp7.size() << '\n';
+//	for (int i = 0; i < tmp7.size(); i++) {
+//		outF << tmp7[i] << ' ';
+//	}
+//
+//
+//	operator_softmax_cpu(&tmp7[0], &tmp7[0], tmp7.size());
+//	auto itMax = std::max_element(tmp7.begin(), tmp7.end());
+//	int digit = itMax - tmp7.begin();
+//	float prob = *itMax;
+//	std::cout << "Digit is " << digit << " with probability " << prob << '\n';
+//}
 
 void test_conv_net1()
 {
 	Model m(EnumDevice::DEVICE_VULKAN);
 
 	int h, w, c;
-	std::vector<float> img = loadImage("trainingSample/1/img_60.jpg",h,w,c);
+	std::vector<float> img = loadImage("trainingSample/1/img_182.jpg",h,w,c);
 	InputLayer* inputLayer = m.addInputLayer({ 28,28,1 });
 	inputLayer->fill(img);
 
@@ -409,12 +409,12 @@ int main()
 	//test_lenet();
 
 	//test_operator_relu();
-	//test_maxpool();
+	test_maxpool();
 	//test_conv2d();
 	//test_mnist_simple();
 
 	//test_conv_net();
 
-	test_conv_net1();
+	//test_conv_net1();
 	return 0;
 }

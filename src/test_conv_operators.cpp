@@ -138,12 +138,12 @@ void test_conv2d_3()
 void test_maxpool() {
 	test_maxpool_1();
 	test_maxpool_2();
+	test_maxpool_3();
 }
 
 void test_maxpool_1()
 {
-	int width = 10, height = 10, kernelWidth = 2, kernelHeight = 2, channels = 1;
-	int outWidth, outHeight;
+	int w = 10, h = 10, c = 1;
 	float inputImage[] = {
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
@@ -156,14 +156,15 @@ void test_maxpool_1()
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 	};
-	std::vector<float> outputImage((height / kernelHeight) * (width / kernelWidth) * channels);
-	std::vector<float> outputImageVk((height / kernelHeight) * (width / kernelWidth) * channels);
+	int size = 2, stride = 2;
+	int padding = 0; // valid
+	int out_w = (w + padding - size) / stride + 1;
+	int out_h = (h + padding - size) / stride + 1;
+	std::vector<float> outputImage(out_w * out_h * c);
+	std::vector<float> outputImageVk(out_w * out_h * c);
 
-	operator_maxpool_cpu(inputImage, height, width, channels,
-		kernelHeight, kernelWidth, &outputImage[0]); 
-	
-	vulkan_operator_maxpool(inputImage, height, width, channels,
-			kernelHeight, kernelWidth, &outputImageVk[0]);
+	operator_maxpool_cpu(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImage[0]);
+	vulkan_operator_maxpool(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImageVk[0]);
 
 	std::vector<float> expected{ 1,3,5,7,9,1,3,5,7,9, 1,3,5,7,9, 1,3,5,7,9, 1,3,5,7,9 };
 	for (int i = 0; i < outputImage.size(); i++) {
@@ -173,8 +174,9 @@ void test_maxpool_1()
 }
 void test_maxpool_2()
 {
-	int width = 5, height = 10, kernelWidth = 2, kernelHeight = 2, channels = 2;
-	int outWidth, outHeight;
+	int w = 5, h = 10, c = 2, size = 2, stride = 2, padding = 0;
+	int out_w = (w + padding - size) / stride + 1;
+	int out_h = (h + padding - size) / stride + 1;
 	float inputImage[] = {
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
@@ -187,16 +189,43 @@ void test_maxpool_2()
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 	};
-	std::vector<float> outputImage((height / kernelHeight) * (width / kernelWidth) * channels);
-	std::vector<float> outputImageVk((height / kernelHeight) * (width / kernelWidth) * channels);
+	std::vector<float> outputImage(out_w * out_h * c);
+	std::vector<float> outputImageVk(out_w * out_h * c);
 
-	operator_maxpool_cpu(inputImage, height, width, channels,
-		kernelHeight, kernelWidth, &outputImage[0]);
-	
-	vulkan_operator_maxpool(inputImage, height, width, channels,
-			kernelHeight, kernelWidth, &outputImageVk[0]);
+	operator_maxpool_cpu(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImage[0]);
+	vulkan_operator_maxpool(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImageVk[0]);
 
 	std::vector<float> expected{ 2,3,6,7,2,3,6,7,2,3,6,7,2,3,6,7,2,3,6,7 };
+	for (int i = 0; i < outputImage.size(); i++) {
+		assert(outputImage[i] == expected[i]);
+		assert(outputImageVk[i] == expected[i]);
+	}
+}
+
+void test_maxpool_3()
+{
+	int w = 5, h = 10, c = 2, size = 2, stride = 2, padding = 1;
+	int out_w = (w + padding - size) / stride + 1;
+	int out_h = (h + padding - size) / stride + 1;
+	float inputImage[] = {
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+	};
+	std::vector<float> outputImage(out_w * out_h * c);
+	std::vector<float> outputImageVk(out_w * out_h * c);
+
+	operator_maxpool_cpu(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImage[0]);
+	vulkan_operator_maxpool(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImageVk[0]);
+
+	std::vector<float> expected{ 2,3,6,7,8,9, 2,3,6,7,8,9, 2,3,6,7,8,9, 2,3,6,7,8,9, 2,3,6,7,8,9};
 	for (int i = 0; i < outputImage.size(); i++) {
 		assert(outputImage[i] == expected[i]);
 		assert(outputImageVk[i] == expected[i]);

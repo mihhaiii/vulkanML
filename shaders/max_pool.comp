@@ -2,43 +2,32 @@
 
 layout(local_size_x_id = 0) in; // workgroup dimensions specialization constants
 layout(push_constant) uniform Parameters {  // push constants
-	int height; int width; int channels; int kernelHeight; int kernelWidth;
-} params;
+	int h, w, c, size, stride, padding, out_h, out_w;
+} p;
 
 layout(std430, binding = 0) buffer lay0 { float inputImage[]; }; // array parameters
 layout(std430, binding = 1) buffer lay1 { float outputImage[]; }; // array parameters
 
 void main(){
-   const uint c = gl_GlobalInvocationID.x; 
-   if(c >= params.channels){
+   const uint k = gl_GlobalInvocationID.x; 
+   if(k >= p.c){
       return;
    }
-  
-   const int height = params.height;
-   const int width = params.width;
-   const int channels = params.channels;
-   const int kernelHeight = params.kernelHeight;
-   const int kernelWidth = params.kernelWidth;
-   
-   
-    // input image is flattened version of   height x width x channels
-	// output image is flattened version of (height / kernelHeight) x (width / kernelWidth) x channels,
-	int outWidth = width / kernelWidth;
-	int outHeight = height / kernelHeight;
-	
-	for (int i = 0; i < outHeight; i++) {
-		for (int j = 0; j < outWidth; j++) {
-			int startI = i * kernelHeight;
-			int startJ = j * kernelWidth;
-			float maxValue = inputImage[startI*width*channels + startJ*channels + c];
-			for (int ii = startI; ii < startI + kernelHeight; ii++) {
-				for (int jj = startJ; jj < startJ + kernelWidth; jj++) {
-					float currentValue = inputImage[ii*width*channels + jj*channels + c]; 
+	int h_offset = -p.padding / 2;
+	int w_offset = -p.padding / 2;
+	for (int i = 0; i < p.out_h; i++) {
+		for (int j = 0; j < p.out_w; j++) {
+			int startI = i * p.stride + h_offset;
+			int startJ = j * p.stride + w_offset;
+			float maxValue = -1e9; // -infinity
+			for (int ii = max(startI,0); ii < min(startI + p.size, p.h); ii++) {
+				for (int jj = max(startJ,0); jj < min(startJ + p.size, p.w); jj++) {
+					float currentValue = inputImage[ii*p.w*p.c + jj*p.c + k]; 
 					if (currentValue > maxValue)
 						maxValue = currentValue;
 				}
 			}
-			outputImage[i*outWidth*channels + j*channels + c] = maxValue;
+			outputImage[i*p.out_w*p.c + j*p.c + k] = maxValue;
 		}
 	}
 }

@@ -172,25 +172,29 @@ private:
 class MaxPooling2dLayer : public Layer
 {
 public:
-	MaxPooling2dLayer(int kernelHeight, int kernelWidth, Tensor* inputImage, EnumDevice device)
-		: m_kernelHeight(kernelHeight), m_kernelWidth(kernelWidth), m_inputImage(inputImage), m_device(device)
+	MaxPooling2dLayer(int _size, int _stride, std::string _padding, Tensor* inputImage, EnumDevice device)
+		: size(_size), stride(_stride), m_inputImage(inputImage), m_device(device)
 	{
 		assert(m_inputImage->getShape().size() == 3);
-		m_height = m_inputImage->getShape()[0];
-		m_width = m_inputImage->getShape()[1];
-		m_channels = m_inputImage->getShape()[2];
+		h = m_inputImage->getShape()[0];
+		w = m_inputImage->getShape()[1];
+		c = m_inputImage->getShape()[2];
 
-		m_outputImage = new Tensor({ m_height / m_kernelHeight, m_width / m_kernelWidth, m_channels }, m_device);
+		assert(_padding == "same" || _padding == "valid");
+		padding = _padding == "valid" ? 0 : size - 1;
+
+		out_h = (h + padding - size) / stride + 1;
+		out_w = (w + padding - size) / stride + 1;
+
+		m_outputImage = new Tensor({ out_h, out_w, c }, m_device);
 	}
 
 	virtual void forward() {
 		if (m_device == DEVICE_CPU) {
-			operator_maxpool_cpu(m_inputImage->getData(), m_height, m_width, m_channels, m_kernelHeight, m_kernelWidth,
-				m_outputImage->getData());
+			operator_maxpool_cpu(m_inputImage->getData(), h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getData());
 		}
 		else if (m_device == DEVICE_VULKAN) {
-			vulkan_operator_maxpool(m_inputImage->getDeviceData(), m_height, m_width, m_channels, m_kernelHeight, m_kernelWidth,
-				m_outputImage->getDeviceData());
+			vulkan_operator_maxpool(m_inputImage->getDeviceData(), h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getDeviceData());
 		}
 	}
 
@@ -203,12 +207,17 @@ public:
 private:
 	Tensor* m_inputImage;
 	Tensor* m_outputImage;
-
-	int m_height;
-	int m_width;
-	int m_channels;
-	int m_kernelHeight;
-	int m_kernelWidth;
+	// input
+	int h;
+	int w;
+	int c;
+	// hyper parameters
+	int size;
+	int stride;
+	int padding;
+	// output
+	int out_h;
+	int out_w;
 	EnumDevice m_device;
 };
 
@@ -369,9 +378,9 @@ public:
 		return layer;
 	}
 
-	MaxPooling2dLayer* addMaxPooling2dLayer(int kH, int kW) {
+	MaxPooling2dLayer* addMaxPooling2dLayer(int size, int stride, const std::string& padding = "valid") {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
-		m_layers.push_back(new MaxPooling2dLayer(kH, kW, prevLayerOutput, m_device));
+		m_layers.push_back(new MaxPooling2dLayer(size, stride, padding, prevLayerOutput, m_device));
 		m_layerNames.push_back("max_pool_" + std::to_string(numMaxPool++));
 		return (MaxPooling2dLayer*)m_layers.back();
 	}
