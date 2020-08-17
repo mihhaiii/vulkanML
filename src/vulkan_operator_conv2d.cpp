@@ -5,67 +5,39 @@
 #include <ctime>
 #include "InstanceManager.h"
 
-void vulkan_operator_conv2d(float * inputImage, int height, int width, int channels, 
-	float * kernels, int kernelHeight, int kernelWidth, float * kernelBiases, float * outputImage, int numOutputChannels,
-	float * outTime)
+void vulkan_operator_conv2d(float* inputImage, float* weights, float* biases, int h, int w, int c, int filters, int size, int stride, int padding, int out_h, int out_w, bool useBias, float* outputImage, float* outTime)
 {
-	auto device = InstanceManger::getInstance().getDefaultDevice();
-	// input image is flattened version of   height x width x channels
-	// kernels is flattened version of	kernelHeight x kernelWidth x channels x numOutputChannels
-	// kernelBiases has a size of	numOutputChannels
-	// output image is flattened version of		(height - kernelHeight + 1)	x (width - kernelWidth + 1) x numOutputChannels
-
 	// create device buffers for all the input parameters
-	auto d_inputImage = vuh::Array<float>(device, height * width * channels);
-	d_inputImage.fromHost(inputImage, inputImage + height * width * channels);
+	auto d_inputImage = vuh::Array<float>(InstanceManger::getInstance().getDefaultDevice(), h * w * c);
+	d_inputImage.fromHost(inputImage, inputImage + h * w * c);
 
-	auto d_kernels = vuh::Array<float>(device, kernelHeight * kernelWidth * channels * numOutputChannels);
-	d_kernels.fromHost(kernels, kernels + kernelHeight * kernelWidth * channels * numOutputChannels);
+	auto d_weights = vuh::Array<float>(InstanceManger::getInstance().getDefaultDevice(), size * size * c * filters);
+	d_weights.fromHost(weights, weights + size * size * c * filters);
 
-	auto d_kernelBiases = vuh::Array<float>(device, numOutputChannels);
-	d_kernelBiases.fromHost(kernelBiases, kernelBiases + numOutputChannels);
+	auto d_biases = vuh::Array<float>(InstanceManger::getInstance().getDefaultDevice(), filters);
+	d_biases.fromHost(biases, biases + filters);
 
-	auto d_outputImage = vuh::Array<float>(device, (height - kernelHeight + 1) * (width - kernelWidth + 1) * numOutputChannels);
+	auto d_outputImage = vuh::Array<float>(InstanceManger::getInstance().getDefaultDevice(), out_h * out_w * filters);
 
-	using Specs = vuh::typelist<uint32_t>;
-	struct Params {
-		int height; int width; int channels; int kernelHeight; int kernelWidth; int numOutputChannels;
-	};
-	const int groupSizeX = 32, groupSizeY = 32, groupSizeZ = 32;
-	const int xSize = height - kernelHeight + 1, ySize = width - kernelWidth + 1, zSize = numOutputChannels;
-	const int numGroupsX = (xSize + groupSizeX - 1) / groupSizeX;
-	const int numGroupsY = (ySize + groupSizeY - 1) / groupSizeY;
-	const int numGroupsZ = (zSize + groupSizeZ - 1) / groupSizeZ;
-
-	auto program = vuh::Program<Specs, Params>(device, "conv2d.spv");
-
-	clock_t start = clock(); // measure only execution time, without data transfer
-	program.grid(numGroupsZ).spec(groupSizeZ);
-	program({ height,width,channels,kernelHeight,kernelWidth,numOutputChannels }, d_inputImage, d_kernels, d_kernelBiases, d_outputImage);
-	if (outTime)
-		*outTime = (float)(clock() - start) / CLOCKS_PER_SEC;
+	vulkan_operator_conv2d(&d_inputImage, &d_weights, &d_biases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &d_outputImage, outTime);
 
 	d_outputImage.toHost(outputImage);
 }
 
-void vulkan_operator_conv2d(vuh::Array<float>* inputImage, int height, int width, int channels, vuh::Array<float>* kernels, 
-	int kernelHeight, int kernelWidth, vuh::Array<float>* kernelBiases, vuh::Array<float>* outputImage, int numOutputChannels, float * outTime)
+void vulkan_operator_conv2d(vuh::Array<float>* inputImage, vuh::Array<float>* weights, vuh::Array<float>* biases, int h, int w, int c, int filters, int size, int stride, int padding, int out_h, int out_w, bool useBias, vuh::Array<float>* outputImage, float* outTime)
 {
 	using Specs = vuh::typelist<uint32_t>;
 	struct Params {
-		int height; int width; int channels; int kernelHeight; int kernelWidth; int numOutputChannels;
+		int h, w, c, filters, size, stride, padding, out_h, out_w, useBias;
 	};
-	const int groupSizeX = 32, groupSizeY = 32, groupSizeZ = 32;
-	const int xSize = height - kernelHeight + 1, ySize = width - kernelWidth + 1, zSize = numOutputChannels;
-	const int numGroupsX = (xSize + groupSizeX - 1) / groupSizeX;
-	const int numGroupsY = (ySize + groupSizeY - 1) / groupSizeY;
-	const int numGroupsZ = (zSize + groupSizeZ - 1) / groupSizeZ;
+	const int groupSize = 32;
+	const int numGroups = (filters + groupSize - 1) / groupSize;
 
 	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), "conv2d.spv");
 
 	clock_t start = clock(); // measure only execution time, without data transfer
-	program.grid(numGroupsZ).spec(groupSizeZ);
-	program({ height,width,channels,kernelHeight,kernelWidth,numOutputChannels }, *inputImage, *kernels, *kernelBiases, *outputImage);
+	program.grid(numGroups).spec(groupSize);
+	program({ h, w, c, filters, size, stride, padding, out_h, out_w, (int)useBias }, *inputImage, *weights, *biases, *outputImage);
 	if (outTime)
 		*outTime = (float)(clock() - start) / CLOCKS_PER_SEC;
 }

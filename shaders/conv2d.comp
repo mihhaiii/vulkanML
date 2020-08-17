@@ -2,43 +2,40 @@
 
 layout(local_size_x_id = 0) in; // workgroup dimensions specialization constants
 layout(push_constant) uniform Parameters {  // push constants
-	int height; int width; int channels; int kernelHeight; int kernelWidth; int numOutputChannels;
-} params;
+	int h, w, c, filters, size, stride, padding, out_h, out_w, useBias;
+} p;
 
-layout(std430, binding = 0) buffer lay0 { float inputImage[]; }; // array parameters
-layout(std430, binding = 1) buffer lay1 { float kernels[]; }; // array parameters
-layout(std430, binding = 2) buffer lay2 { float kernelBiases[]; }; // array parameters
-layout(std430, binding = 3) buffer lay3 { float outputImage[]; }; // array parameters
+layout(std430, binding = 0) buffer lay0 { float inputImage[]; }; 
+layout(std430, binding = 1) buffer lay1 { float weights[]; }; 
+layout(std430, binding = 2) buffer lay2 { float biases[]; }; 
+layout(std430, binding = 3) buffer lay3 { float outputImage[]; };
 
 void main(){
-  // const uint i = gl_GlobalInvocationID.x; 
-  // const uint j = gl_GlobalInvocationID.y; 
-   const uint outputChannel = gl_GlobalInvocationID.x; 
-   if(/*i >= params.height - params.kernelHeight + 1 || j >= params.width - params.kernelWidth + 1 || */outputChannel >= params.numOutputChannels){
+  const uint out_c = gl_GlobalInvocationID.x; 
+  if(out_c >= p.filters){
       return;
-   }
+  }
   
-   const int height = params.height;
-   const int width = params.width;
-   const int channels = params.channels;
-   const int kernelHeight = params.kernelHeight;
-   const int kernelWidth = params.kernelWidth;
-   const int numOutputChannels = params.numOutputChannels;
-  
-  for (int i = 0; i < height - kernelHeight + 1; i++) {
-			for (int j = 0; j < width - kernelWidth + 1; j++) {
-				   float res = kernelBiases[outputChannel];
-				   for (int kI = 0; kI < kernelHeight; kI++) {
-						for (int kJ = 0; kJ < kernelWidth; kJ++) {
-							for (int c = 0; c < channels; c++) {
-								float imageValue = inputImage[(i+kI)*width*channels+(j+kJ)*channels+c]; // [i + kI][j + kJ][c];
-								float kernelValue = kernels[kI*kernelWidth*channels*numOutputChannels + 
-									kJ*channels*numOutputChannels + c*numOutputChannels + outputChannel]; // [kI][kJ][c][outputChannel];
+  int h_offset = -p.padding / 2;
+  int w_offset = -p.padding / 2;
+  for (int i = 0; i < p.out_h; i++) {
+			for (int j = 0; j < p.out_w; j++) {
+					int startI = i * p.stride + h_offset;
+					int startJ = j * p.stride + w_offset;
+				    float res = p.useBias != 0 ? biases[out_c] : 0;
+				    for (int ii = max(startI, 0); ii < min(startI + p.size, p.h); ii++) {
+						for (int jj = max(startJ, 0); jj < min(startJ + p.size, p.w); jj++) {
+							for (int k = 0; k < p.c; k++) {
+								float imageValue = inputImage[ii*p.w*p.c + jj*p.c + k];
+								int kI = ii - startI;
+								int kJ = jj - startJ;
+								float kernelValue = weights[kI*p.size*p.c*p.filters + 
+									kJ*p.c*p.filters + k*p.filters + out_c];
 								res += imageValue * kernelValue;
 							}
 						}
-				   }
-				   outputImage[i*(width-kernelWidth+1)*numOutputChannels+j*numOutputChannels+outputChannel] = res; // outputImage[i][j][outputChannel]
+				    }
+				    outputImage[i*p.out_w*p.filters + j*p.filters + out_c] = res;
 		}
    }
 }

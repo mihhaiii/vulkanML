@@ -1,34 +1,35 @@
 #include "operator_conv2d_cpu.h"
 #include <algorithm>
 
-void operator_conv2d_cpu(float * inputImage, int height, int width, int channels,
-	float * kernels, int kernelHeight, int kernelWidth, float* kernelBiases, float * outputImage, int numOutputChannels)
+void operator_conv2d_cpu(float* inputImage, float* weights, float* biases, int h, int w, int c, int filters, int size, int stride, int padding, int out_h, int out_w, bool useBias, float* outputImage)
 {
-	// input image is flattened version of   height x width x channels
-	// kernels is flattened version of	kernelHeight x kernelWidth x channels x numOutputChannels
-	// kernelBiases has a size of	numOutputChannels
-	// output image is flattened version of		(height - kernelHeight + 1)	x (width - kernelWidth + 1) x numOutputChannels
+	// input image is flattened version of   h x w x c
+	// weights is flattened version of	size x size x c x filters
+	// biases has a size of filters
+	// output image is flattened version of out_h x out_w x filters
 
-	// numOutputChannels is the number of neurons in this conv2d layer
-	for (int outputChannel = 0; outputChannel < numOutputChannels; outputChannel++) {
-		
-
-		for (int i = 0; i < height - kernelHeight + 1; i++) {
-			for (int j = 0; j < width - kernelWidth + 1; j++) {
-				float res = kernelBiases[outputChannel];
-				for (int kI = 0; kI < kernelHeight; kI++) {
-					for (int kJ = 0; kJ < kernelWidth; kJ++) {
-						for (int channel = 0; channel < channels; channel++) {
-							float imageValue = inputImage[(i+kI)*width*channels+(j+kJ)*channels+channel]; // [i + kI][j + kJ][channel];
-							float kernelValue = kernels[kI*kernelWidth*channels*numOutputChannels + 
-								kJ*channels*numOutputChannels + channel*numOutputChannels + outputChannel]; // [kI][kJ][channel][outputChannel];
+	int h_offset = -padding / 2;
+	int w_offset = -padding / 2;
+	for (int out_c = 0; out_c < filters; out_c++) {
+		for (int i = 0; i < out_h; i++) {
+			for (int j = 0; j < out_w; j++) {
+				int startI = i * stride + h_offset;
+				int startJ = j * stride + w_offset;
+				float res = useBias ? biases[out_c] : 0;
+				for (int ii = std::max(startI,0); ii < std::min(startI + size, h); ii++) {
+					for (int jj = std::max(startJ,0); jj < std::min(startJ + size, w); jj++) {
+						for (int k = 0; k < c; k++) {
+							float imageValue = inputImage[ii*w*c + jj*c + k];
+							int kI = ii - startI;
+							int kJ = jj - startJ;
+							float kernelValue = weights[kI*size*c*filters +  
+								kJ*c*filters + k*filters + out_c];
 							res += imageValue * kernelValue;
 						}
 					}
 				}
-				outputImage[i*(width-kernelWidth+1)*numOutputChannels+j*numOutputChannels+outputChannel] = res; // outputImage[i][j][outputChannel]
+				outputImage[i*out_w*filters + j*filters + out_c] = res;
 			}
-		}
-		
+		}	
 	}
 }

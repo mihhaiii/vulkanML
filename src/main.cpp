@@ -368,15 +368,15 @@ void test_conv_net1()
 	InputLayer* inputLayer = m.addInputLayer({ 28,28,1 });
 	inputLayer->fill(img);
 
-	m.addConv2dLayer(32, 3, 3, "conv_mnist/layer_0_weights", "conv_mnist/layer_0_biases");
+	m.addConv2dLayer(32, 3, 1, "valid", true, "conv_mnist/layer_0_weights", "conv_mnist/layer_0_biases");
 	m.addReLULayer();
 	m.addMaxPooling2dLayer(2, 2);
 
-	m.addConv2dLayer(64, 3, 3, "conv_mnist/layer_1_weights", "conv_mnist/layer_1_biases");
+	m.addConv2dLayer(64, 3, 1, "valid", true, "conv_mnist/layer_1_weights", "conv_mnist/layer_1_biases");
 	m.addReLULayer();
 	m.addMaxPooling2dLayer(2, 2);
 
-	m.addConv2dLayer(64, 3, 3, "conv_mnist/layer_2_weights", "conv_mnist/layer_2_biases");
+	m.addConv2dLayer(64, 3, 1, "valid", true, "conv_mnist/layer_2_weights", "conv_mnist/layer_2_biases");
 	m.addReLULayer();
 
 	m.addFCLayer(64, true, "conv_mnist/layer_3_weights", "conv_mnist/layer_3_biases");
@@ -409,8 +409,8 @@ int main()
 	//test_lenet();
 
 	//test_operator_relu();
-	test_maxpool();
-	//test_conv2d();
+	//test_maxpool();
+	test_conv2d();
 	//test_mnist_simple();
 
 	//test_conv_net();

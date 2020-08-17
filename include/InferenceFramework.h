@@ -112,61 +112,70 @@ public:
 class Conv2dLayer : public Layer
 {
 public:
-	Conv2dLayer(int numOutputChannels, int kernelHeight, int kernelWidth, Tensor* inputImage, EnumDevice device)
-		: m_numOutputChannels(numOutputChannels), m_kernelHeight(kernelHeight), m_kernelWidth(kernelWidth), m_inputImage(inputImage),
-		m_device(device)
+	Conv2dLayer(int _filters, int _size, int _stride, const std::string& _padding, bool _useBias, Tensor* _inputImage, EnumDevice _device)
+		: filters(_filters), size(_size), stride(_stride), useBias(_useBias), inputImage(_inputImage),	device(_device)
 	{
-		assert(m_inputImage->getShape().size() == 3); 
-		m_height = m_inputImage->getShape()[0];
-		m_width = m_inputImage->getShape()[1];
-		m_channels = m_inputImage->getShape()[2];
+		assert(inputImage->getShape().size() == 3); 
+		h = inputImage->getShape()[0];
+		w = inputImage->getShape()[1];
+		c = inputImage->getShape()[2];
 
-		m_outputImage = new Tensor({ m_height - kernelHeight + 1, m_width - kernelWidth + 1, numOutputChannels }, m_device);
-		m_kernelsWeights = new Tensor({ m_kernelHeight, m_kernelWidth, m_channels, m_numOutputChannels }, m_device);
-		m_kernelsBiases = new Tensor({ m_numOutputChannels }, m_device);
+		assert(_padding == "same" || _padding == "valid");
+		padding = _padding == "valid" ? 0 : size - 1;
+
+		out_h = (h + padding - size) / stride + 1;
+		out_w = (w + padding - size) / stride + 1;
+
+		outputImage = new Tensor({ out_h, out_w, filters }, device);
+		weigths = new Tensor({ size, size, c, filters }, device);
+		if (useBias)
+			biases = new Tensor({ filters }, device);
 	}
 
 	void readWeights(const char* binFile) {
-		m_kernelsWeights->readData(binFile);
+		weigths->readData(binFile);
 	}
 
 	void readBiases(const char* binFile) {
-		m_kernelsBiases->readData(binFile);
+		if (useBias)
+			biases->readData(binFile);
 	}
 
 	virtual void forward() {
-		if (m_device == DEVICE_CPU) {
-			operator_conv2d_cpu(m_inputImage->getData(), m_height, m_width, m_channels, m_kernelsWeights->getData(),
-				m_kernelHeight, m_kernelWidth, m_kernelsBiases->getData(), m_outputImage->getData(), m_numOutputChannels);
+		if (device == DEVICE_CPU) {
+			operator_conv2d_cpu(inputImage->getData(), weigths->getData(), biases->getData(), h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getData());
 		}
-		else if (m_device == DEVICE_VULKAN) {
-			vulkan_operator_conv2d(m_inputImage->getDeviceData(), m_height, m_width, m_channels, m_kernelsWeights->getDeviceData(),
-				m_kernelHeight, m_kernelWidth, m_kernelsBiases->getDeviceData(), m_outputImage->getDeviceData(), m_numOutputChannels);
+		else if (device == DEVICE_VULKAN) {
+			vulkan_operator_conv2d(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
 		}
 	}
 
-	Tensor* getOutputTensor() { return m_outputImage; }
+	Tensor* getOutputTensor() { return outputImage; }
 
 	~Conv2dLayer() {
-		delete m_outputImage;
-		delete m_kernelsWeights;
-		delete m_kernelsBiases;
+		delete outputImage;
+		delete weigths;
+		if (useBias)
+			delete biases;
 	}
 
 private:
-	Tensor* m_inputImage;
-	Tensor* m_outputImage;
-	Tensor* m_kernelsWeights;
-	Tensor* m_kernelsBiases;
+	Tensor* inputImage;
+	Tensor* outputImage;
+	Tensor* weigths;
+	Tensor* biases;
 
-
-	int m_height;
-	int m_width;
-	int m_channels;
-	int m_kernelHeight;
-	int m_kernelWidth;
-	int m_numOutputChannels;
-	EnumDevice m_device;
+	int h;
+	int w;
+	int c;
+	int filters;
+	int size;
+	int stride;
+	int padding;
+	bool useBias;
+	int out_h;
+	int out_w;
+	EnumDevice device;
 };
 
 class MaxPooling2dLayer : public Layer
@@ -368,9 +377,9 @@ public:
 		return (InputLayer*)m_layers.back();
 	}
 
-	Conv2dLayer* addConv2dLayer(int numOutputChannels, int kH, int kW, const char* weigthsFile = nullptr, const char* biasesFile = nullptr) {
+	Conv2dLayer* addConv2dLayer(int filters, int size, int stride, const std::string& padding = "valid", bool useBias = true, const char* weigthsFile = nullptr, const char* biasesFile = nullptr) {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
-		Conv2dLayer* layer = new Conv2dLayer(numOutputChannels, kH, kW, prevLayerOutput, m_device);
+		Conv2dLayer* layer = new Conv2dLayer(filters, size, stride, padding, useBias, prevLayerOutput, m_device);
 		m_layers.push_back(layer);
 		if (weigthsFile) layer->readWeights(weigthsFile);
 		if (biasesFile) layer->readBiases(biasesFile);

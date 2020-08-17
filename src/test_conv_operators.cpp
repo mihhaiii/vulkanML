@@ -10,6 +10,7 @@
 void test_conv2d()
 {
 	test_conv2d_1();
+	test_conv2d_1_padding();
 	test_conv2d_2();
 	test_conv2d_3();
 }
@@ -17,7 +18,8 @@ void test_conv2d()
 
 void test_conv2d_1()
 {
-	int height = 5, width = 5, channels = 1, kernelHeight = 3, kernelWidth = 3, numOutputChannels = 1;
+	int h = 5, w = 5, c = 1, size = 3, stride = 1, filters = 1;
+	int padding = 0;
 	float inputImage[] = {
 		1, 2, 3, 4, 5,
 		1, 1, 1, 1, 1,
@@ -33,14 +35,15 @@ void test_conv2d_1()
 	float kernelBiases[] = {
 		1
 	};
+	int out_w = (w + padding - size) / stride + 1;
+	int out_h = (h + padding - size) / stride + 1;
+	bool useBias = true;
 	std::vector<float> outputImage(9);
 	std::vector<float> outputImageVk(9);
 
-	operator_conv2d_cpu(inputImage, height, width, channels,
-		kernels, kernelHeight, kernelWidth, kernelBiases, &outputImage[0], numOutputChannels);
-	vulkan_operator_conv2d(inputImage, height, width, channels,
-		kernels, kernelHeight, kernelWidth, kernelBiases, &outputImageVk[0], numOutputChannels);
-
+	operator_conv2d_cpu(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
+	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
+	
 	std::vector<float> expected{8, 10, 12, 9, 12, 15, 8, 10, 12};
 	for (int i = 0; i < outputImage.size(); i++) {
 		assert(outputImage[i] == expected[i]);
@@ -49,9 +52,45 @@ void test_conv2d_1()
 }
 
 
+void test_conv2d_1_padding()
+{
+	int h = 5, w = 5, c = 1, size = 3, stride = 1, filters = 1;
+	int padding = size - 1; // padding = "same"
+	float inputImage[] = {
+		1, 2, 3, 4, 5,
+		1, 1, 1, 1, 1,
+		1, 2, 3, 4, 5,
+		1, 1, 1, 1, 1,
+		1, 2, 3, 4, 5,
+	};
+	float kernels[] = {
+		0, 1, 0,
+		1, 1, 1,
+		0, 1, 0
+	};
+	float kernelBiases[] = {
+		1
+	};
+	int out_w = (w + padding - size) / stride + 1;
+	int out_h = (h + padding - size) / stride + 1;
+	bool useBias = true;
+	std::vector<float> outputImage(25);
+	std::vector<float> outputImageVk(25);
+
+	operator_conv2d_cpu(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
+	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
+
+	std::vector<float> expected{ 5, 8, 11, 14, 11, 5, 8, 10, 12, 13, 6, 9, 12, 15, 12, 5, 8, 10, 12, 13, 5, 8, 11, 14, 11 };
+	for (int i = 0; i < outputImage.size(); i++) {
+		assert(outputImage[i] == expected[i]);
+		assert(outputImageVk[i] == expected[i]);
+	}
+}
+
 void test_conv2d_2()
 {
-	int height = 5, width = 5, channels = 1, kernelHeight = 3, kernelWidth = 3, numOutputChannels = 2;
+	int h = 5, w = 5, c = 1, size = 3, stride = 1, filters = 2;
+	int padding = 0;
 	float inputImage[] = {
 		1, 1, 1, 1, 1,
 		1, 1, 1, 1, 1,
@@ -75,13 +114,14 @@ void test_conv2d_2()
 	float kernelBiases[] = {
 		1,-1
 	};
+	int out_w = (w + padding - size) / stride + 1;
+	int out_h = (h + padding - size) / stride + 1;
+	bool useBias = true;
 	std::vector<float> outputImage(18);
 	std::vector<float> outputImageVk(18);
 
-	operator_conv2d_cpu(inputImage, height, width, channels,
-		kernels, kernelHeight, kernelWidth, kernelBiases, &outputImage[0], numOutputChannels);
-	vulkan_operator_conv2d(inputImage, height, width, channels,
-		kernels, kernelHeight, kernelWidth, kernelBiases, &outputImageVk[0], numOutputChannels);
+	operator_conv2d_cpu(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
+	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
 
 	std::vector<float> expected{ 6,2,6,2,6,2,6,2,6,2,6,2,6,2,6,2,6,2 };
 	for (int i = 0; i < outputImage.size(); i++) {
@@ -92,7 +132,7 @@ void test_conv2d_2()
 
 void test_conv2d_3()
 {
-	int height = 6, width = 5, channels = 3, kernelHeight = 2, kernelWidth = 2, numOutputChannels = 2;
+	int h = 6, w = 5, c = 3, size = 2, stride = 1, filters = 2, padding = 0;
 	float inputImage[] = {
 		1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3,
 		1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3,
@@ -114,13 +154,14 @@ void test_conv2d_3()
 	float kernelBiases[] = {
 		1,-1
 	};
+	int out_w = (w + padding - size) / stride + 1;
+	int out_h = (h + padding - size) / stride + 1;
+	bool useBias = true;
 	std::vector<float> outputImage(40);
 	std::vector<float> outputImageVk(40);
 
-	operator_conv2d_cpu(inputImage, height, width, channels,
-		kernels, kernelHeight, kernelWidth, kernelBiases, &outputImage[0], numOutputChannels);
-	vulkan_operator_conv2d(inputImage, height, width, channels,
-		kernels, kernelHeight, kernelWidth, kernelBiases, &outputImageVk[0], numOutputChannels);
+	operator_conv2d_cpu(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
+	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
 
 	std::vector<float> expected;
 	while (expected.size() < 40) {

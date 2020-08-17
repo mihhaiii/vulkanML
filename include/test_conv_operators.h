@@ -2,6 +2,7 @@
 
 void test_conv2d();
 void test_conv2d_1();
+void test_conv2d_1_padding();
 void test_conv2d_2();
 void test_conv2d_3();
 

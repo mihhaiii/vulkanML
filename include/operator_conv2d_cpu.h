@@ -1,4 +1,3 @@
 #pragma once
 
-void operator_conv2d_cpu(float * inputImage,  int height, int width, int channels,
-	float * kernels,  int kernelHeight, int kernelWidth, float* kernelBiases, float * outputImage, int numOutputChannels);
+void operator_conv2d_cpu(float* inputImage, float* weights, float* biases, int h, int w, int c, int filters, int size, int stride, int padding, int out_h, int out_w, bool useBias, float* outputImage);
