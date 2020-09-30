@@ -25,7 +25,7 @@ void vulkan_operator_maxpool(vuh::Array<float>* inputImage, int h, int w, int c,
 	const int groupSize = 32;
 	const int numGroups = (c + groupSize - 1) / groupSize;
 
-	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), "max_pool.spv");
+	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "max_pool.spv");
 
 	clock_t start = clock(); // measure only execution time, without data transfer
 	program.grid(numGroups).spec(groupSize);

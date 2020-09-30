@@ -23,7 +23,7 @@ void vulkan_operator_reduce_max(float * inputs, int numInputs, float * result, f
 	d_inputs.fromHost(inputs, inputs + numInputs);
 	auto d_maxPerGroup = vuh::Array<float>(device, numGroups);
 
-	auto program = vuh::Program<Specs, Params>(device, "reduce_max.spv");
+	auto program = vuh::Program<Specs, Params>(device, SHADERS_LOCATION "reduce_max.spv");
 	program.grid(numGroups).spec(groupSize)({ numInputs }, d_inputs, d_maxPerGroup);
 	std::vector<float> maxPerGroup(numGroups);
 	d_maxPerGroup.toHost(begin(maxPerGroup));

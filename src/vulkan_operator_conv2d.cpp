@@ -33,7 +33,7 @@ void vulkan_operator_conv2d(vuh::Array<float>* inputImage, vuh::Array<float>* we
 	const int groupSize = 32;
 	const int numGroups = (filters + groupSize - 1) / groupSize;
 
-	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), "conv2d.spv");
+	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "conv2d.spv");
 
 	clock_t start = clock(); // measure only execution time, without data transfer
 	program.grid(numGroups).spec(groupSize);

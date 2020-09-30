@@ -24,7 +24,7 @@ void vulkan_operator_reduce_sum(float * inputs, int numInputs, float * result, f
 	d_inputs.fromHost(inputs, inputs + numInputs);
 	auto d_sumPerGroup = vuh::Array<float>(device, numGroups);
 
-	auto program = vuh::Program<Specs, Params>(device, "reduce_sum.spv");
+	auto program = vuh::Program<Specs, Params>(device, SHADERS_LOCATION "reduce_sum.spv");
 	program.grid(numGroups).spec(groupSize)({ numInputs }, d_inputs, d_sumPerGroup);
 	std::vector<float> sumPerGroup(numGroups);
 	d_sumPerGroup.toHost(begin(sumPerGroup));

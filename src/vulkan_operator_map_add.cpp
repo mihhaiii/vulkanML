@@ -23,7 +23,7 @@ void vulkan_operator_map_add(float * inputs, int numInputs, float * outputs, flo
 	d_inputs.fromHost(inputs, inputs + numInputs);
 	auto d_outputs = vuh::Array<float>(device, numInputs);
 
-	auto program = vuh::Program<Specs, Params>(device, "map_add_scalar.spv");
+	auto program = vuh::Program<Specs, Params>(device, SHADERS_LOCATION "map_add_scalar.spv");
 	program.grid(numGroups).spec(groupSize)({ numInputs, scalar }, d_inputs, d_outputs);
 	d_outputs.toHost(outputs);
 }

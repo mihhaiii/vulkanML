@@ -18,7 +18,7 @@ void vulkan_operator_relu(float * inputs, float * outputs, int numInputs, float 
 	d_inputs.fromHost(inputs, inputs + numInputs);
 	auto d_outputs = vuh::Array<float>(device, numInputs);
 
-	auto program = vuh::Program<Specs, Params>(device, "relu.spv");
+	auto program = vuh::Program<Specs, Params>(device, SHADERS_LOCATION "relu.spv");
 	program.grid(numGroups).spec(groupSize)({ numInputs }, d_inputs, d_outputs);
 	d_outputs.toHost(outputs);
 }
@@ -30,6 +30,6 @@ void vulkan_operator_relu(vuh::Array<float>* inputs, vuh::Array<float>* outputs,
 	const int groupSize = 1024;
 	const int numGroups = (numInputs + groupSize - 1) / groupSize;
 
-	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), "relu.spv");
+	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "relu.spv");
 	program.grid(numGroups).spec(groupSize)({ numInputs }, *inputs, *outputs);
 }

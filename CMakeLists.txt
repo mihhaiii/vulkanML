@@ -17,9 +17,9 @@ file (GLOB HEADERS
 
 )
 
-MESSAGE("Creating the executable project vulkanML")
-add_executable(vulkanML ${SOURCE} ${HEADERS})
-target_include_directories(vulkanML PRIVATE "include/")
+MESSAGE("Creating static library vulkanML")
+add_library(vulkanML STATIC ${SOURCE} ${HEADERS})
+target_include_directories(vulkanML PUBLIC "include/")
 
 target_link_libraries(vulkanML PUBLIC vuh::vuh)
 
@@ -33,21 +33,16 @@ FOREACH (shader_file ${SHADERS})
 	MESSAGE("Compiling shader ${shader_name}")
 	vuh_compile_shader("${shader_name}_shader"
 		SOURCE ${shader_file}
-		TARGET ${CMAKE_CURRENT_BINARY_DIR}/${shader_name}.spv
+		TARGET "${CMAKE_CURRENT_BINARY_DIR}/compiled_shaders/${shader_name}.spv"
 	)
+	MESSAGE(${CMAKE_CURRENT_BINARY_DIR}/${shader_name}.spv)
 	add_dependencies(vulkanML "${shader_name}_shader")
 ENDFOREACH()
-	
-MESSAGE("Copying tre-trained weights to the binaries directory")
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/trainingSample"
-     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/model_weights"
-     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")	
+add_compile_definitions(SHADERS_LOCATION="${CMAKE_CURRENT_BINARY_DIR}/compiled_shaders/")
 	 
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/conv_mnist"
-     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")	
+add_subdirectory(examples)
 	 
-	 
+
 	 
 	 

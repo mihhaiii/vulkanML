@@ -410,11 +410,12 @@ int main()
 
 	//test_operator_relu();
 	//test_maxpool();
-	test_conv2d();
+	//test_conv2d();
+
 	//test_mnist_simple();
 
 	//test_conv_net();
 
-	//test_conv_net1();
+	test_conv_net1();
 	return 0;
 }
