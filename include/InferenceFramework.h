@@ -12,6 +12,8 @@
 #include "vulkan_operator_relu.h"
 #include <iostream>
 #include "vulkan_operator_leaky_relu.h"
+#include "vulkan_operator_batch_normalization.h"
+#include <time.h>
 
 using Shape = std::vector<int>;
 
@@ -66,6 +68,11 @@ public:
 		if (binFile) {
 			readData(binFile);
 		}
+		m_shapeSuffixProduct.resize(m_shape.size() + 1);
+		m_shapeSuffixProduct.back() = 1;
+		for (int i = m_shapeSuffixProduct.size() - 2; i >= 0; i--) {
+			m_shapeSuffixProduct[i] = m_shapeSuffixProduct[i + 1] * m_shape[i];
+		}
 	}
 
 	void readData(const char* binFile) {
@@ -88,6 +95,18 @@ public:
 	int getSize() { return m_size; }
 	Shape getShape() { return m_shape; }
 
+	float at(const Shape& loc)
+	{
+		assert(m_data);
+		assert(loc.size() == m_shape.size());
+		int idx = 0;
+		for (int i = 0; i < loc.size(); i++) {
+			idx += loc[i] * m_shapeSuffixProduct[i + 1];
+		}
+		assert(idx < m_size);
+		return m_data[idx];
+	}
+
 	~Tensor() {
 		delete[] m_data;
 		delete m_deviceData;
@@ -96,6 +115,7 @@ public:
 private:
 	int m_size;
 	Shape m_shape;
+	std::vector<int> m_shapeSuffixProduct;
 	float* m_data;
 	vuh::Array<float>* m_deviceData;
 	EnumDevice m_device;
@@ -362,6 +382,70 @@ private:
 	EnumDevice m_device;
 };
 
+
+class BatchNormalizationLayer : public Layer
+{
+public:
+	BatchNormalizationLayer(Tensor* input, EnumDevice device)
+		: m_input(input), m_device(device), eps(0.001) 
+	{
+		int filters = m_input->getShape().back(); // assuming data_format == channels_last
+		m_params = new Tensor({ 4, filters }, m_device);
+	}
+
+	virtual void forward() {
+		if (m_device == EnumDevice::DEVICE_CPU) {
+			float* data = m_input->getData();
+			float* params = m_params->getData();
+			int filters = m_input->getShape().back();
+			for (int i = 0; i < m_input->getSize(); i++) {
+				int channel = i % filters;
+				float gamma = m_params->at({ 0, channel });
+				float beta = m_params->at({ 1, channel });
+				float mean = m_params->at({ 2, channel });
+				float variance = m_params->at({ 3, channel });
+				data[i] = (data[i] - mean) / sqrt(variance + eps);
+				data[i] = data[i] * gamma + beta;
+			}
+		}
+		else if (m_device == EnumDevice::DEVICE_VULKAN) {
+			vulkan_operator_batch_normalization(m_input->getDeviceData(), m_input->getSize(), m_input->getShape().back(), m_params->getDeviceData());
+		}
+	}
+	Tensor* getOutputTensor() { return m_input; }
+
+	void readParams(const char* filename)
+	{
+		m_params->readData(filename);
+	}
+
+	void setParams(const std::vector<float>& inParams)
+	{
+		assert(m_params->getSize() == inParams.size());
+
+		if (m_device == EnumDevice::DEVICE_CPU) {
+			for (int i = 0; i < m_params->getSize(); i++) {
+				m_params->getData()[i] = inParams[i];
+			}
+		} 
+		else if (m_device == EnumDevice::DEVICE_VULKAN) {
+			m_params->getDeviceData()->fromHost(&inParams[0], &inParams[0] + inParams.size());
+		}	
+	}
+
+	~BatchNormalizationLayer()
+	{
+		delete m_params;
+	}
+
+private:
+	Tensor* m_input;
+	EnumDevice m_device;
+
+	Tensor* m_params; // order: gamma, beta, mean, variance (same as tf)
+	const float eps;
+};
+
 class Model
 {
 public:
@@ -420,9 +504,24 @@ public:
 		return layer;
 	}
 
+	BatchNormalizationLayer* addBatchNormalizationLayer(const char* paramsFilename = nullptr) {
+		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
+		BatchNormalizationLayer* layer = new BatchNormalizationLayer(prevLayerOutput, m_device);
+		if (paramsFilename) {
+			layer->readParams(paramsFilename);
+		}
+		m_layers.push_back(layer);
+		m_layerNames.push_back("batch_norm_" + std::to_string(numBatchNorm++));
+		return layer;
+	}
+
 	float* getOutputData() {
 		Tensor* outputTensor = m_layers.back()->getOutputTensor();
 		return m_device == DEVICE_CPU ? outputTensor->getData() : outputTensor->getDataFromDeviceData();
+	}
+
+	int getOutputDataSize() {
+		return m_layers.back()->getOutputTensor()->getSize();
 	}
 
 	void run() {
@@ -448,6 +547,6 @@ private:
 	std::vector<Layer*> m_layers;
 	EnumDevice m_device;
 
-	int numConv, numFC, numRELU, numMaxPool, numLeakyRELU;
+	int numConv, numFC, numRELU, numMaxPool, numLeakyRELU, numBatchNorm;
 	std::vector<std::string> m_layerNames;
 };
