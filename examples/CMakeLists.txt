@@ -1,2 +1,3 @@
 add_subdirectory(test_project)
 add_subdirectory(operator_unit_tests)
+add_subdirectory(yolo_tiny)

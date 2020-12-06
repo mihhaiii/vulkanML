@@ -8,8 +8,8 @@ static float sqr(float a) {
 
 static void batch_norm_test1()
 {
-	Model m1(DEVICE_CPU);
-	Model m2(DEVICE_VULKAN);
+	SequentialModel m1(DEVICE_CPU);
+	SequentialModel m2(DEVICE_VULKAN);
 
 	const int n = 10;
 	std::vector<float> data(n);

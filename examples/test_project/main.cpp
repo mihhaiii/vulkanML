@@ -206,7 +206,7 @@ std::vector<float> loadImage(const char * filename, int& width, int& height, int
 		&width,
 		&height,
 		&channels,
-		STBI_grey);
+		0);
 	std::vector<float> img(width * height * channels);
 	for (int i = 0; i < img.size(); i++) {
 		img[i] = (float)image[i] / 255.0;
@@ -361,7 +361,7 @@ void test_mnist_simple()
 
 void test_conv_net1()
 {
-	Model m(EnumDevice::DEVICE_VULKAN);
+	SequentialModel m(EnumDevice::DEVICE_VULKAN);
 
 	int h, w, c;
 	std::vector<float> img = loadImage("trainingSample/6/img_26.jpg",h,w,c);

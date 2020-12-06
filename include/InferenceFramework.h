@@ -127,6 +127,8 @@ public:
 	virtual void forward() = 0;
 	virtual Tensor* getOutputTensor() = 0;
 	virtual ~Layer() {}
+protected:
+	std::vector<Layer*>	m_outgoingLayers;
 };
 
 class Conv2dLayer : public Layer
@@ -446,10 +448,10 @@ private:
 	const float eps;
 };
 
-class Model
+class SequentialModel
 {
 public:
-	Model(EnumDevice device)
+	SequentialModel(EnumDevice device)
 	 : m_device(device),
 		numConv(0), numFC(0), numRELU(0), numMaxPool(0), numLeakyRELU(0)
 	{
@@ -537,7 +539,7 @@ public:
 		}
 	}
 
-	~Model() {
+	~SequentialModel() {
 		for (auto& l : m_layers) {
 			delete l;
 		}
