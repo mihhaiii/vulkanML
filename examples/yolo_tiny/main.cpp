@@ -84,6 +84,16 @@ int main()
 	m.addLeakyReLULayer();
 
 
+
+	InputLayer* inputs = new InputLayer({ 416, 416, 3 });
+	Tensor* x = new Conv2dLayer(16, 3, 1, "same", false)->of(inputs);
+	x = new BatchNormalizationLayer()->of(x);
+	x = new LeakyReLULayer()->of(x);
+	x = new MaxPooling2dLayer(2, 2, "same")->of(x);
+
+	Model* yolo = new Model({ inputs }, { x });
+	std::vector<float> img = loadTestImage("data/meme.jpg");
+	Tensor* outputs = yolo->run(img);
 	
 	return 0;
 }

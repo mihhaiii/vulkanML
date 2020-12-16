@@ -14,6 +14,7 @@
 #include "vulkan_operator_leaky_relu.h"
 #include "vulkan_operator_batch_normalization.h"
 #include <time.h>
+#include <set>
 
 using Shape = std::vector<int>;
 
@@ -46,6 +47,14 @@ void readBinFile(const char * fileName, float* out, int count) {
 	fclose(file);
 };
 
+void readBinFile(FILE* file, float* out, int count)
+{
+	int read = fread(out, sizeof(float), count, file);
+	assert(read == count);
+}
+
+
+class Layer;
 
 class Tensor
 {
@@ -84,6 +93,28 @@ public:
 		}	
 	}
 
+	void readData(FILE* file) {
+		if (!m_data)
+			m_data = new float[m_size];
+		readBinFile(file, m_data, m_size);
+		if (m_device & DEVICE_VULKAN) {
+			m_deviceData->fromHost(m_data, m_data + m_size);
+		}
+	}
+
+	void setData(const std::vector<float>& data)
+	{
+		if (!m_data)
+			m_data = new float[m_size];
+		assert(data.size() == m_size);
+		for (int i = 0; i < m_size; i++) {
+			m_data[i] = data[i];
+		}
+		if (m_device & DEVICE_VULKAN) {
+			m_deviceData->fromHost(m_data, m_data + m_size);
+		}
+	}
+
 	float* getData() { return m_data; }
 	vuh::Array<float>* getDeviceData() { return m_deviceData; }
 	float* getDataFromDeviceData() {
@@ -107,11 +138,14 @@ public:
 		return m_data[idx];
 	}
 
+	Layer* getParentLayer() { return m_parentLayer; }
+
 	~Tensor() {
 		delete[] m_data;
 		delete m_deviceData;
 	}
 
+	friend class Layer;
 private:
 	int m_size;
 	Shape m_shape;
@@ -119,43 +153,113 @@ private:
 	float* m_data;
 	vuh::Array<float>* m_deviceData;
 	EnumDevice m_device;
+
+	Layer* m_parentLayer; // the layer that owns this tensor or the last last layer that modifies this tensor
 };
 
 class Layer
 {
 public:
+	Layer(EnumDevice _device = DEVICE_CPU)
+		: m_device(_device), m_isInputLinked(false) {}
 	virtual void forward() = 0;
 	virtual Tensor* getOutputTensor() = 0;
-	virtual ~Layer() {}
+	std::vector<Layer*>& getOutgoingLayers() { return m_outgoingLayers; }
+	std::vector<Layer*>& getInputLayers() { return m_inputLayers; }
+
+	virtual void readWeigthsFromFile(FILE* file) {};
+
+	static void addConnection(Layer* from, Layer* to)
+	{
+		from->m_outgoingLayers.push_back(to);
+		to->m_inputLayers.push_back(from);
+	}
+
+	// link input(s) to layer and returns output layer
+	Tensor* of(const std::vector<Tensor*>& inputs)
+	{
+		for (Tensor* t : inputs) {
+			addConnection(t->m_parentLayer, this);
+		}
+
+		init(inputs);
+		m_isInputLinked = true;
+
+		getOutputTensor()->m_parentLayer = this;
+		return getOutputTensor();
+	}
+
+	Tensor* operator()(Tensor* input) {
+		return of({ input });
+	}
+
+	virtual ~Layer() 
+	{
+		for (Tensor* t : m_ownedTensors) {
+			delete t;
+		}
+	}
 protected:
+	virtual void init(const std::vector<Tensor*>& inputs) = 0;
+	Tensor* createOwnedTensor(const std::vector<int>& shape)
+	{
+		Tensor* t = new Tensor(shape, m_device);
+		m_ownedTensors.push_back(t);
+		t->m_parentLayer = this;
+		return t;
+	}
+
+protected:
+	std::vector<Layer*> m_inputLayers;
 	std::vector<Layer*>	m_outgoingLayers;
+	std::vector<Tensor*> m_ownedTensors;
+
+	EnumDevice m_device;
+	bool m_isInputLinked;
 };
 
 class Conv2dLayer : public Layer
 {
 public:
-	Conv2dLayer(int _filters, int _size, int _stride, const std::string& _padding, bool _useBias, Tensor* _inputImage, EnumDevice _device)
-		: filters(_filters), size(_size), stride(_stride), useBias(_useBias), inputImage(_inputImage),	device(_device)
+	Conv2dLayer(int _filters, int _size, int _stride, const std::string& _padding, bool _useBias, EnumDevice _device = DEVICE_CPU)
+		: filters(_filters), size(_size), stride(_stride), useBias(_useBias), Layer(_device)
 	{
-		assert(inputImage->getShape().size() == 3); 
+		assert(_padding == "same" || _padding == "valid");
+		padding = _padding == "valid" ? 0 : size - 1;
+	}
+
+	virtual void init(const std::vector<Tensor*>& inputs) override
+	{	
+		assert(inputs.size() == 1);
+		inputImage = inputs[0];
+
+		assert(inputImage->getShape().size() == 3);
 		h = inputImage->getShape()[0];
 		w = inputImage->getShape()[1];
 		c = inputImage->getShape()[2];
 
-		assert(_padding == "same" || _padding == "valid");
-		padding = _padding == "valid" ? 0 : size - 1;
-
+		
 		out_h = (h + padding - size) / stride + 1;
 		out_w = (w + padding - size) / stride + 1;
 
-		outputImage = new Tensor({ out_h, out_w, filters }, device);
-		weigths = new Tensor({ size, size, c, filters }, device);
+		outputImage = createOwnedTensor({ out_h, out_w, filters });
+		weigths = createOwnedTensor({ size, size, c, filters });
 		if (useBias)
-			biases = new Tensor({ filters }, device);
+			biases = createOwnedTensor({ filters });
+	}
+
+	virtual void readWeigthsFromFile(FILE* file) override
+	{
+		readWeights(file);
+		readBiases(file);
 	}
 
 	void readWeights(const char* binFile) {
 		weigths->readData(binFile);
+	}
+
+	void readWeights(FILE* file) {
+		weigths->readData(file);
 	}
 
 	void readBiases(const char* binFile) {
@@ -163,23 +267,22 @@ public:
 			biases->readData(binFile);
 	}
 
+	void readBiases(FILE* file) {
+		if (useBias)
+			biases->readData(file);
+	}
+
 	virtual void forward() {
-		if (device == DEVICE_CPU) {
+		assert(m_isInputLinked);
+		if (m_device == DEVICE_CPU) {
 			operator_conv2d_cpu(inputImage->getData(), weigths->getData(), biases->getData(), h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getData());
 		}
-		else if (device == DEVICE_VULKAN) {
+		else if (m_device == DEVICE_VULKAN) {
 			vulkan_operator_conv2d(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
 		}
 	}
 
 	Tensor* getOutputTensor() { return outputImage; }
-
-	~Conv2dLayer() {
-		delete outputImage;
-		delete weigths;
-		if (useBias)
-			delete biases;
-	}
 
 private:
 	Tensor* inputImage;
@@ -197,28 +300,34 @@ private:
 	bool useBias;
 	int out_h;
 	int out_w;
-	EnumDevice device;
 };
 
 class MaxPooling2dLayer : public Layer
 {
 public:
-	MaxPooling2dLayer(int _size, int _stride, std::string _padding, Tensor* inputImage, EnumDevice device)
-		: size(_size), stride(_stride), m_inputImage(inputImage), m_device(device)
+	MaxPooling2dLayer(int _size, int _stride, std::string _padding, EnumDevice device = DEVICE_CPU)
+		: size(_size), stride(_stride), Layer(device)
 	{
+		assert(_padding == "same" || _padding == "valid");
+		padding = _padding == "valid" ? 0 : size - 1;
+	}
+
+	virtual void init(const std::vector<Tensor*>& inputs) override
+	{
+		assert(inputs.size() == 1);
+		m_inputImage = inputs[0];
+
 		assert(m_inputImage->getShape().size() == 3);
 		h = m_inputImage->getShape()[0];
 		w = m_inputImage->getShape()[1];
 		c = m_inputImage->getShape()[2];
 
-		assert(_padding == "same" || _padding == "valid");
-		padding = _padding == "valid" ? 0 : size - 1;
-
 		out_h = (h + padding - size) / stride + 1;
 		out_w = (w + padding - size) / stride + 1;
 
-		m_outputImage = new Tensor({ out_h, out_w, c }, m_device);
+		m_outputImage = createOwnedTensor({ out_h, out_w, c });
 	}
+
 
 	virtual void forward() {
 		if (m_device == DEVICE_CPU) {
@@ -230,10 +339,6 @@ public:
 	}
 
 	Tensor* getOutputTensor() { return m_outputImage; }
-
-	~MaxPooling2dLayer() {
-		delete m_outputImage;
-	}
 
 private:
 	Tensor* m_inputImage;
@@ -249,18 +354,29 @@ private:
 	// output
 	int out_h;
 	int out_w;
-	EnumDevice m_device;
 };
 
 class FCLayer : public Layer
 {
 public:
-	FCLayer(int numNeurons, Tensor* input, EnumDevice device, bool applyRelu)
-		: m_numNeurons(numNeurons), m_input(input), m_device(device), m_applyRelu(applyRelu)
+	FCLayer(int numNeurons, EnumDevice device = DEVICE_CPU, bool applyRelu = false)
+		: m_numNeurons(numNeurons), Layer(device), m_applyRelu(applyRelu)
 	{
-		m_weights = new Tensor({ input->getSize(), numNeurons }, m_device);
-		m_biases = new Tensor({ numNeurons }, m_device);
-		m_output = new Tensor({ numNeurons }, m_device);
+	}
+
+	virtual void init(const std::vector<Tensor*>& inputs) override
+	{
+		assert(inputs.size() == 1);
+		m_input = inputs[0];
+		m_weights = createOwnedTensor({ m_input->getSize(), m_numNeurons });
+		m_biases = createOwnedTensor({ m_numNeurons });
+		m_output = createOwnedTensor({ m_numNeurons });
+	}
+
+	virtual void readWeigthsFromFile(FILE* file) override
+	{
+		readWeights(file);
+		readBiases(file);
 	}
 
 	void readWeights(const char* binFile) {
@@ -269,6 +385,14 @@ public:
 
 	void readBiases(const char* binFile) {
 		m_biases->readData(binFile);
+	}
+
+	void readWeights(FILE* file) {
+		m_weights->readData(file);
+	}
+
+	void readBiases(FILE* file) {
+		m_biases->readData(file);
 	}
 
 	virtual void forward() {
@@ -284,12 +408,6 @@ public:
 
 	Tensor* getOutputTensor() { return m_output; }
 
-	~FCLayer() {
-		delete m_weights;
-		delete m_biases;
-		delete m_output;
-	}
-
 private:
 
 	int m_numNeurons;
@@ -297,22 +415,25 @@ private:
 	Tensor* m_weights;
 	Tensor* m_biases;
 	Tensor* m_output;
-	EnumDevice m_device;
 	bool m_applyRelu;
 };
 
 class InputLayer : public Layer
 {
 public:
-	InputLayer(const Shape& shape, EnumDevice device, const char* binFile = nullptr)
-		: m_shape(shape), m_device(device)
+	InputLayer(const Shape& shape, EnumDevice device = DEVICE_CPU, const char* binFile = nullptr)
+		: m_shape(shape), Layer(device)
 	{
-		m_data = new Tensor(shape, device);
+		m_data = createOwnedTensor(shape);
 		if (binFile)
 			m_data->readData(binFile);
 	}
 
-	void fill(std::vector<float>& src) {
+	virtual void init(const std::vector<Tensor*>& inputs) override {
+		assert(false); // input layer does not have other inputs
+	}
+
+	void fill(const std::vector<float>& src) {
 		assert(src.size() == m_data->getSize());
 		if (m_device == DEVICE_CPU) {
 			float* dest = m_data->getData();
@@ -328,20 +449,22 @@ public:
 	virtual void forward() {}
 	Tensor* getOutputTensor() { return m_data; }
 
-	~InputLayer() {
-		delete m_data;
-	}
 private:
 	Shape m_shape;
 	Tensor* m_data;
-	EnumDevice m_device;
 };
 
 class ReLULayer : public Layer
 {
 public:
-	ReLULayer(Tensor* input, EnumDevice device)
-		: m_input(input), m_device(device) {}
+	ReLULayer(EnumDevice device = DEVICE_CPU)
+		: Layer(device) {}
+
+	virtual void init(const std::vector<Tensor*>& inputs) override
+	{
+		assert(inputs.size() == 1);
+		m_input = inputs[0];
+	}
 
 	virtual void forward() {
 		if (m_device == EnumDevice::DEVICE_CPU) {
@@ -357,15 +480,20 @@ public:
 
 private:
 	Tensor* m_input;
-	EnumDevice m_device;
 };
 
 
 class LeakyReLULayer : public Layer
 {
 public:
-	LeakyReLULayer(Tensor* input, EnumDevice device)
-		: m_input(input), m_device(device) {}
+	LeakyReLULayer(EnumDevice device = DEVICE_CPU)
+		: Layer(device) {}
+
+	virtual void init(const std::vector<Tensor*>& inputs) override
+	{
+		assert(inputs.size() == 1);
+		m_input = inputs[0];
+	}
 
 	virtual void forward() {
 		if (m_device == EnumDevice::DEVICE_CPU) {
@@ -381,18 +509,24 @@ public:
 
 private:
 	Tensor* m_input;
-	EnumDevice m_device;
 };
 
 
 class BatchNormalizationLayer : public Layer
 {
 public:
-	BatchNormalizationLayer(Tensor* input, EnumDevice device)
-		: m_input(input), m_device(device), eps(0.001) 
+	BatchNormalizationLayer(EnumDevice device = DEVICE_CPU)
+		: Layer(device), eps(0.001)
 	{
+	}
+
+	virtual void init(const std::vector<Tensor*>& inputs) override
+	{
+		assert(inputs.size() == 1);
+		m_input = inputs[0];
+
 		int filters = m_input->getShape().back(); // assuming data_format == channels_last
-		m_params = new Tensor({ 4, filters }, m_device);
+		m_params = createOwnedTensor({ 4, filters });
 	}
 
 	virtual void forward() {
@@ -416,9 +550,19 @@ public:
 	}
 	Tensor* getOutputTensor() { return m_input; }
 
+	virtual void readWeigthsFromFile(FILE* file) override
+	{
+		readParams(file);
+	}
+
 	void readParams(const char* filename)
 	{
 		m_params->readData(filename);
+	}
+	
+	void readParams(FILE* file)
+	{
+		m_params->readData(file);
 	}
 
 	void setParams(const std::vector<float>& inParams)
@@ -435,14 +579,8 @@ public:
 		}	
 	}
 
-	~BatchNormalizationLayer()
-	{
-		delete m_params;
-	}
-
 private:
 	Tensor* m_input;
-	EnumDevice m_device;
 
 	Tensor* m_params; // order: gamma, beta, mean, variance (same as tf)
 	const float eps;
@@ -453,7 +591,7 @@ class SequentialModel
 public:
 	SequentialModel(EnumDevice device)
 	 : m_device(device),
-		numConv(0), numFC(0), numRELU(0), numMaxPool(0), numLeakyRELU(0)
+		numConv(0), numFC(0), numRELU(0), numMaxPool(0), numLeakyRELU(0), numBatchNorm(0)
 	{
 	}
 
@@ -465,7 +603,8 @@ public:
 
 	Conv2dLayer* addConv2dLayer(int filters, int size, int stride, const std::string& padding = "valid", bool useBias = true, const char* weigthsFile = nullptr, const char* biasesFile = nullptr) {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
-		Conv2dLayer* layer = new Conv2dLayer(filters, size, stride, padding, useBias, prevLayerOutput, m_device);
+		Conv2dLayer* layer = new Conv2dLayer(filters, size, stride, padding, useBias, m_device);
+		layer->of({ prevLayerOutput }); // link layer input
 		m_layers.push_back(layer);
 		if (weigthsFile) layer->readWeights(weigthsFile);
 		if (biasesFile) layer->readBiases(biasesFile);
@@ -475,14 +614,17 @@ public:
 
 	MaxPooling2dLayer* addMaxPooling2dLayer(int size, int stride, const std::string& padding = "valid") {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
-		m_layers.push_back(new MaxPooling2dLayer(size, stride, padding, prevLayerOutput, m_device));
+		MaxPooling2dLayer* layer = new MaxPooling2dLayer(size, stride, padding, m_device);
+		layer->of({ prevLayerOutput }); // link layer input
+		m_layers.push_back(layer);
 		m_layerNames.push_back("max_pool_" + std::to_string(numMaxPool++));
 		return (MaxPooling2dLayer*)m_layers.back();
 	}
 
 	FCLayer* addFCLayer(int numNeurons, bool applyRelu, const char* weigthsFile = nullptr, const char* biasesFile = nullptr) {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
-		FCLayer* layer = new FCLayer(numNeurons, prevLayerOutput, m_device, applyRelu);
+		FCLayer* layer = new FCLayer(numNeurons, m_device, applyRelu);
+		layer->of({ prevLayerOutput }); // link layer input
 		m_layers.push_back(layer);
 		if (weigthsFile) layer->readWeights(weigthsFile);
 		if (biasesFile) layer->readBiases(biasesFile);
@@ -492,7 +634,8 @@ public:
 
 	ReLULayer* addReLULayer() {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
-		ReLULayer* layer = new ReLULayer(prevLayerOutput, m_device);
+		ReLULayer* layer = new ReLULayer(m_device);
+		layer->of({ prevLayerOutput }); // link layer input
 		m_layers.push_back(layer);
 		m_layerNames.push_back("relu_" + std::to_string(numRELU++));
 		return layer;
@@ -500,7 +643,8 @@ public:
 	
 	LeakyReLULayer* addLeakyReLULayer() {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
-		LeakyReLULayer* layer = new LeakyReLULayer(prevLayerOutput, m_device);
+		LeakyReLULayer* layer = new LeakyReLULayer(m_device);
+		layer->of({ prevLayerOutput }); // link layer input
 		m_layers.push_back(layer);
 		m_layerNames.push_back("leaky_relu_" + std::to_string(numLeakyRELU++));
 		return layer;
@@ -508,7 +652,8 @@ public:
 
 	BatchNormalizationLayer* addBatchNormalizationLayer(const char* paramsFilename = nullptr) {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
-		BatchNormalizationLayer* layer = new BatchNormalizationLayer(prevLayerOutput, m_device);
+		BatchNormalizationLayer* layer = new BatchNormalizationLayer(m_device);
+		layer->of({ prevLayerOutput }); // link layer input
 		if (paramsFilename) {
 			layer->readParams(paramsFilename);
 		}
@@ -551,4 +696,73 @@ private:
 
 	int numConv, numFC, numRELU, numMaxPool, numLeakyRELU, numBatchNorm;
 	std::vector<std::string> m_layerNames;
+};
+
+
+class Model
+{
+public:
+	Model(Tensor* input, Tensor* output, EnumDevice device = DEVICE_CPU)
+		: m_device(device),
+		m_input(input), m_output(output)
+	{
+		topologicalSort();
+	}
+
+	Tensor* run(const std::vector<float>& input)
+	{
+		m_input->setData(input);
+		for (Layer* l : sortedLayers) {
+			l->forward();
+		}
+		return m_output;
+	}
+
+	std::vector<Layer*>& layers() { return sortedLayers; }
+
+	void readWeights(const char* filename)
+	{
+		FILE* file = fopen(filename, "rb");
+		
+		for (Layer* l : sortedLayers)
+		{
+			l->readWeigthsFromFile(file);
+		}
+
+		fclose(file);
+	}
+	
+
+private:
+	void topologicalSort()
+	{
+		sortedLayers.clear();
+		std::set<Layer*> visited;
+
+		dfs(m_input->getParentLayer(), visited);
+
+		reverse(sortedLayers.begin(), sortedLayers.end());
+
+		assert(visited.find(m_output->getParentLayer()) != visited.end());
+	}
+
+	void dfs(Layer* l, std::set<Layer*>& visited)
+	{
+		if (visited.find(l) != visited.end())
+			return;
+
+		visited.insert(l);
+
+		for (Layer* n : l->getOutgoingLayers()) {
+			dfs(n, visited);
+		}
+		sortedLayers.push_back(l);
+	}
+
+private:
+	Tensor* m_input;
+	Tensor* m_output;
+	std::vector<Layer*> sortedLayers;
+
+	EnumDevice m_device;
 };

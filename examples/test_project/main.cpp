@@ -25,6 +25,7 @@
 #include "InferenceFramework.h"
 #include <fstream>
 #include "InstanceManager.h"
+#include "OperatorFunctionInterface.h"
 
 void test_vulkan_operator_FC()
 {
@@ -364,7 +365,7 @@ void test_conv_net1()
 	SequentialModel m(EnumDevice::DEVICE_VULKAN);
 
 	int h, w, c;
-	std::vector<float> img = loadImage("trainingSample/6/img_26.jpg",h,w,c);
+	std::vector<float> img = loadImage("trainingSample/9/img_28.jpg",h,w,c);
 	InputLayer* inputLayer = m.addInputLayer({ 28,28,1 });
 	inputLayer->fill(img);
 
@@ -396,6 +397,51 @@ void test_conv_net1()
 	std::cout << "Run time: " << time << '\n';
 }
 
+
+void test_conv_net_Functional_API()
+{
+	int h, w, c;
+	std::vector<float> img = loadImage("trainingSample/9/img_28.jpg", h, w, c);
+
+	Tensor* input = Input({ 28,28,1 });
+	Tensor* x;
+	
+	x = Conv2D(32, 3)(input);
+	x = ReLU()(x);
+	x = MaxPool2D(2, 2)(x);
+
+	x = Conv2D(64, 3)(x);
+	x = ReLU()(x);
+	x = MaxPool2D(2, 2)(x);
+
+	x = Conv2D(64, 3)(x);
+	x = ReLU()(x);
+	
+	x = Dense(64)(x);
+	x = ReLU()(x);
+	x = Dense(10)(x);
+
+	Model* m = new Model(input, x);
+
+	std::ifstream in_file("conv_mnist/simple_conv_mnist_weights", std::ios::binary);
+	in_file.seekg(0, std::ios::end);
+	int file_size = in_file.tellg();
+	std::cout << "Size of the file is" << " " << file_size << " " << "bytes\n";
+	in_file.close();
+
+	m->readWeights("conv_mnist/simple_conv_mnist_weights");
+
+	x = m->run(img);
+
+	float* output = x->getData();
+	operator_softmax_cpu(output, output, 10);
+	auto itMax = std::max_element(output, output + 10);
+	int digit = itMax - output;
+	float prob = *itMax;
+	std::cout << "Digit is " << digit << " with probability " << prob << '\n';
+	std::cout << "Run time: " << time << '\n';
+}
+
 int main()
 {
 	//test_vulkan_operator_FC();
@@ -417,5 +463,6 @@ int main()
 	//test_conv_net();
 
 	test_conv_net1();
+	test_conv_net_Functional_API();
 	return 0;
 }
