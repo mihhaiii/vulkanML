@@ -15,6 +15,7 @@
 #include "vulkan_operator_batch_normalization.h"
 #include <time.h>
 #include <set>
+#include "vulkan_operator_upSampling_2D.h"
 
 using Shape = std::vector<int>;
 
@@ -84,16 +85,21 @@ public:
 
 		EnumDevice prevDevice = m_device;
 		m_device = device;
-		if ((m_device & DEVICE_CPU) && m_data == nullptr) {
-			m_data = new float[m_size];
+		if (m_device & DEVICE_CPU)
+		{
+			if (m_data == nullptr) {
+				m_data = new float[m_size];
+			}
 			if (prevDevice == DEVICE_VULKAN) {
 				m_deviceData->toHost(m_data);
 			}
 		}
 
-		if ((m_device & DEVICE_VULKAN) && m_deviceData == nullptr)
+		if (m_device & DEVICE_VULKAN)
 		{
-			m_deviceData = new vuh::Array<float>(InstanceManger::getInstance().getDefaultDevice(), m_size);
+			if (m_deviceData == nullptr) {
+				m_deviceData = new vuh::Array<float>(InstanceManger::getInstance().getDefaultDevice(), m_size);
+			}
 			if (prevDevice == DEVICE_CPU) {
 				m_deviceData->fromHost(m_data, m_data + m_size);
 			}
@@ -153,7 +159,7 @@ public:
 	int getSize() { return m_size; }
 	Shape getShape() { return m_shape; }
 
-	float at(const Shape& loc)
+	float& at(const Shape& loc)
 	{
 		assert(m_data);
 		assert(loc.size() == m_shape.size());
@@ -540,6 +546,50 @@ private:
 };
 
 
+class UpSampling2DLayer : public Layer
+{
+public:
+	UpSampling2DLayer(int size) : size(size) {} // nearest interpolation
+
+	virtual void init(const std::vector<Tensor*>& inputs) override
+	{
+		assert(inputs.size() == 1);
+		m_input = inputs[0];
+
+		assert(m_input->getShape().size() == 3);
+		h = m_input->getShape()[0];
+		w = m_input->getShape()[1];
+		c = m_input->getShape()[2];
+		out_h = h * size;
+		out_w = w * size;
+		m_output = createOwnedTensor({ out_h, out_w, c });
+	}
+
+	virtual void forward() {
+		assert(m_device != DEVICE_UNSPECIFIED);
+		if (m_device == EnumDevice::DEVICE_CPU) {
+			for (int i = 0; i < out_h; i++) {
+				for (int j = 0; j < out_w; j++) {
+					for (int k = 0; k < c; k++) {
+						m_output->at({ i,j,k }) = m_input->at({ i / size, j / size, k });
+					}
+				}
+			}
+		}
+		else if (m_device == EnumDevice::DEVICE_VULKAN) {
+			vulkan_operator_upSampling_2D(m_input->getDeviceData(), m_output->getDeviceData(), h, w, c, size);
+		}
+	}
+	Tensor* getOutputTensor() { return m_output; }
+
+private:
+	int size, h, w, c, out_h, out_w;
+	Tensor* m_input;
+	Tensor* m_output;
+};
+
+
+
 class BatchNormalizationLayer : public Layer
 {
 public:
@@ -620,7 +670,7 @@ class SequentialModel
 public:
 	SequentialModel(EnumDevice device)
 	 : m_device(device),
-		numConv(0), numFC(0), numRELU(0), numMaxPool(0), numLeakyRELU(0), numBatchNorm(0)
+		numConv(0), numFC(0), numRELU(0), numMaxPool(0), numLeakyRELU(0), numBatchNorm(0), numUpSampling2D(0)
 	{
 	}
 
@@ -685,6 +735,16 @@ public:
 		m_layerNames.push_back("leaky_relu_" + std::to_string(numLeakyRELU++));
 		return layer;
 	}
+	
+	UpSampling2DLayer* addUpSampling2DLayer(int size) {
+		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
+		UpSampling2DLayer* layer = new UpSampling2DLayer(size);
+		layer->setDevice(m_device);
+		layer->of({ prevLayerOutput }); // link layer input
+		m_layers.push_back(layer);
+		m_layerNames.push_back("UpSampling2DLayer_" + std::to_string(numLeakyRELU++));
+		return layer;
+	}
 
 	BatchNormalizationLayer* addBatchNormalizationLayer(const char* paramsFilename = nullptr) {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
@@ -731,7 +791,7 @@ private:
 	std::vector<Layer*> m_layers;
 	EnumDevice m_device;
 
-	int numConv, numFC, numRELU, numMaxPool, numLeakyRELU, numBatchNorm;
+	int numConv, numFC, numRELU, numMaxPool, numLeakyRELU, numBatchNorm, numUpSampling2D;
 	std::vector<std::string> m_layerNames;
 };
 
@@ -744,14 +804,12 @@ public:
 		m_input(input), m_output(output)
 	{
 		topologicalSort();
-
-		for (Layer* l : sortedLayers) {
-			l->setDevice(device);
-		}
+		setDevice();
 	}
 
 	Tensor* run(const std::vector<float>& input)
 	{
+		setDevice();
 		m_input->setData(input);
 		for (Layer* l : sortedLayers) {
 			l->forward();
@@ -785,6 +843,13 @@ private:
 		reverse(sortedLayers.begin(), sortedLayers.end());
 
 		assert(visited.find(m_output->getParentLayer()) != visited.end());
+	}
+
+	void setDevice()
+	{
+		for (Layer* l : sortedLayers) {
+			l->setDevice(m_device);
+		}
 	}
 
 	void dfs(Layer* l, std::set<Layer*>& visited)

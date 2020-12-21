@@ -51,3 +51,10 @@ LeakyReLULayer& LeakyReLU()
 	LayerManager::getInstance().add(l);
 	return *l;
 }
+
+UpSampling2DLayer& UpSampling2D(int size)
+{
+	UpSampling2DLayer* l = new UpSampling2DLayer(size);
+	LayerManager::getInstance().add(l);
+	return *l;
+}

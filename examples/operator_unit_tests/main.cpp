@@ -12,6 +12,7 @@ int main()
 	
 	test_batch_norm();	
 	
-	
+	test_UpSampling2D();
+
 	return 0;
 }
