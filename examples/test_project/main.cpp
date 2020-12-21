@@ -365,7 +365,7 @@ void test_conv_net1()
 	SequentialModel m(EnumDevice::DEVICE_VULKAN);
 
 	int h, w, c;
-	std::vector<float> img = loadImage("trainingSample/9/img_28.jpg",h,w,c);
+	std::vector<float> img = loadImage("trainingSample/8/img_171.jpg",h,w,c);
 	InputLayer* inputLayer = m.addInputLayer({ 28,28,1 });
 	inputLayer->fill(img);
 
@@ -401,7 +401,7 @@ void test_conv_net1()
 void test_conv_net_Functional_API()
 {
 	int h, w, c;
-	std::vector<float> img = loadImage("trainingSample/9/img_28.jpg", h, w, c);
+	std::vector<float> img = loadImage("trainingSample/8/img_171.jpg", h, w, c);
 
 	Tensor* input = Input({ 28,28,1 });
 	Tensor* x;
@@ -421,7 +421,7 @@ void test_conv_net_Functional_API()
 	x = ReLU()(x);
 	x = Dense(10)(x);
 
-	Model* m = new Model(input, x);
+	Model* m = new Model(input, x, EnumDevice::DEVICE_VULKAN);
 
 	std::ifstream in_file("conv_mnist/simple_conv_mnist_weights", std::ios::binary);
 	in_file.seekg(0, std::ios::end);

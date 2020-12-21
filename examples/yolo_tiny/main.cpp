@@ -38,62 +38,82 @@ int main()
 {
 	std::cout << "Yolo tiny" << std::endl;
 
-	SequentialModel m(EnumDevice::DEVICE_CPU);
-
 	std::vector<float> img = loadTestImage("data/meme.jpg");
-	m.addInputLayer({ imageSize, imageSize, 3 })->fill(img);
 	
-	// DarknetTiny
-	m.addConv2dLayer(16, 3 /*size*/, 1 /*stride*/, "same" /*padding*/, false /*useBias*/);
-	m.addBatchNormalizationLayer();
-	m.addLeakyReLULayer();
-	m.addMaxPooling2dLayer(2 /*size*/, 2 /*stride*/, "same");
+	Tensor* input = Input({ imageSize,imageSize,3 });
+	Tensor* x, *x_8, *output_0, *output_1, *boxes_0, *boxes_1, *outputs;
 
-	m.addConv2dLayer(32, 3 /*size*/, 1 /*stride*/, "same" /*padding*/, false /*useBias*/);
-	m.addBatchNormalizationLayer();
-	m.addLeakyReLULayer();
-	m.addMaxPooling2dLayer(2 /*size*/, 2 /*stride*/, "same");
+	// Darknet tiny
+	x = Conv2D(16, 3, 1, "same", false)(input);
+	x = BatchNorm()(x);
+	x = LeakyReLU()(x);
+	x = MaxPool2D(2, 2, "same")(x);
 
-	m.addConv2dLayer(64, 3 /*size*/, 1 /*stride*/, "same" /*padding*/, false /*useBias*/);
-	m.addBatchNormalizationLayer();
-	m.addLeakyReLULayer();
-	m.addMaxPooling2dLayer(2 /*size*/, 2 /*stride*/, "same");
+	x = Conv2D(32, 3, 1, "same", false)(x);
+	x = BatchNorm()(x);
+	x = LeakyReLU()(x);
+	x = MaxPool2D(2, 2, "same")(x);
 
-	m.addConv2dLayer(128, 3 /*size*/, 1 /*stride*/, "same" /*padding*/, false /*useBias*/);
-	m.addBatchNormalizationLayer();
-	m.addLeakyReLULayer();
-	m.addMaxPooling2dLayer(2 /*size*/, 2 /*stride*/, "same");
+	x = Conv2D(64, 3, 1, "same", false)(x);
+	x = BatchNorm()(x);
+	x = LeakyReLU()(x);
+	x = MaxPool2D(2, 2, "same")(x);
 
-	m.addConv2dLayer(256, 3 /*size*/, 1 /*stride*/, "same" /*padding*/, false /*useBias*/);
-	m.addBatchNormalizationLayer();
-	m.addLeakyReLULayer();
-	m.addMaxPooling2dLayer(2 /*size*/, 2 /*stride*/, "same");
+	x = Conv2D(128, 3, 1, "same", false)(x);
+	x = BatchNorm()(x);
+	x = LeakyReLU()(x);
+	x = MaxPool2D(2, 2, "same")(x);
 
-	m.addConv2dLayer(512, 3 /*size*/, 1 /*stride*/, "same" /*padding*/, false /*useBias*/);
-	m.addBatchNormalizationLayer();
-	m.addLeakyReLULayer();
-	m.addMaxPooling2dLayer(2 /*size*/, 2 /*stride*/, "same");
+	x = Conv2D(256, 3, 1, "same", false)(x);
+	x = BatchNorm()(x);
+	x = LeakyReLU()(x);
+	x = MaxPool2D(2, 2, "same")(x);
 
-	m.addConv2dLayer(1024, 3 /*size*/, 1 /*stride*/, "same" /*padding*/, false /*useBias*/);
-	m.addBatchNormalizationLayer();
-	m.addLeakyReLULayer();
+	x = Conv2D(512, 3, 1, "same", false)(x);
+	x = BatchNorm()(x);
+	x = LeakyReLU()(x);
+	x = MaxPool2D(2, 2, "same")(x);
+
+	x = Conv2D(1024, 3, 1, "same", false)(x);
+	x = BatchNorm()(x);
+	x = LeakyReLU()(x);
 
 	// YoloConvTiny
-	m.addConv2dLayer(256, 1 /*size*/, 1 /*stride*/, "same" /*padding*/, false /*useBias*/);
-	m.addBatchNormalizationLayer();
-	m.addLeakyReLULayer();
+	int filters = 256;
+	int anchors = 3, classes = 80;
+	x = Conv2D(filters, 1, 1, "same", false)(x);
+	x = BatchNorm()(x);
+	x_8 = x = LeakyReLU()(x);
+	// Yolo output
+	output_0 = Conv2D(filters * 2, 3, 1, "same", false)(x);
+	output_0 = BatchNorm()(output_0);
+	output_0 = LeakyReLU()(output_0);
+	output_0 = Conv2D(anchors * (classes + 5), 1, 1, "same", true)(output_0);
+	
+	// YoloConvTiny of (x, x_8)
+	filters = 128;
+	x = Conv2D(filters, 1, 1, "same", false)(x);
+	x = BatchNorm()(x);
+	x = LeakyReLU()(x);
+	//x = UpSampling2D(2)(x); // TODO
+	//x = Concat({ x, x_8 }); // TODO
+	// Yolo output
+	output_1 = Conv2D(filters * 2, 3, 1, "same", false)(x);
+	output_1 = BatchNorm()(output_1);
+	output_1 = LeakyReLU()(output_1);
+	output_1 = Conv2D(anchors * (classes + 5), 1, 1, "same", true)(output_1);
 
+	// yolo boxes
+	//boxes_0 = Lambda([&](Tensor* t) {})(output_0); // TODO
+	//boxes_1 = Lambda([&](Tensor* t) {})(output_1); // TODO
 
+	// outputs = Lambda(yolo_nms)({boxes_0, boxes_1}); // TODO
 
-	InputLayer* inputs = new InputLayer({ 416, 416, 3 });
-	Tensor* x = new Conv2dLayer(16, 3, 1, "same", false)->of(inputs);
-	x = new BatchNormalizationLayer()->of(x);
-	x = new LeakyReLULayer()->of(x);
-	x = new MaxPooling2dLayer(2, 2, "same")->of(x);
+	Model* m = new Model(input, outputs);
+	m->run(img);
 
-	Model* yolo = new Model({ inputs }, { x });
-	std::vector<float> img = loadTestImage("data/meme.jpg");
-	Tensor* outputs = yolo->run(img);
+	// show outputs TODO
+	// draw outputs TODO
 	
 	return 0;
 }
