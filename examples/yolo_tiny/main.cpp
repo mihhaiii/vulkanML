@@ -9,10 +9,13 @@
 #include "stb_image_write.h"
 #include "OperatorFunctionInterface.h"
 #include <fstream>
+#include "TensorUtils.h"
 
 using namespace std;
 
 const int imageSize = 416;
+const int anchors = 3;
+const int classes = 80;
 
 
 std::vector<float> loadTestImage(const char* filename) {
@@ -34,6 +37,24 @@ std::vector<float> loadTestImage(const char* filename) {
 	delete[] image;
 	delete[] resizedImage;
 	return img;
+}
+
+void yolo_boxes(Tensor* t)
+{
+	t->reshape({ t->getShape()[0], t->getShape()[1], anchors, classes + 5 });
+	// t.shape = (grid, grid, anchors, (x, y, w, h, obj, ...classes))
+	int h = t->getShape()[0];
+	int w = t->getShape()[1];
+
+	t->setDevice(DEVICE_CPU);
+	auto tensors = split(t, { 2,2,1,classes }, -1);
+	Tensor* box_xy = tensors[0]; 
+	Tensor* box_wh = tensors[1];
+	Tensor* objectness = tensors[2];
+	Tensor* class_probs = tensors[3];
+	sigmoid(box_xy);
+	sigmoid(objectness);
+	sigmoid(class_probs);
 }
 
 int main()
@@ -111,11 +132,13 @@ int main()
 
 	// outputs = Lambda(yolo_nms)({boxes_0, boxes_1}); // TODO
 
-	Model* m = new Model(input, output_1, DEVICE_VULKAN);
+	Model* m = new Model(input, output_1, DEVICE_CPU);
 	m->readWeights("data/yolov3-tiny.weights", 5); // major, minor, revision, seen, _
 	std::cout << "Model params: " << m->getParamCount() << "\n";
 	m->run(img);
 	
+	yolo_boxes(output_0);
+	yolo_boxes(output_1);
 
 	std::ifstream in_file("data/yolov3-tiny.weights", std::ios::binary);
 	in_file.seekg(0, std::ios::end);

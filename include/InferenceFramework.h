@@ -20,14 +20,7 @@
 
 using Shape = std::vector<int>;
 
-int getShapeSize(const Shape& shape) {
-	int total = 1;
-	assert(shape.size() != 0);
-	for (auto& dim : shape) {
-		total *= dim;
-	}
-	return total;
-}
+int getShapeSize(const Shape& shape);
 
 enum EnumDevice
 {
@@ -38,24 +31,8 @@ enum EnumDevice
 };
 
 
-void readBinFile(const char * fileName, float* out, int count) {
-	FILE* file = fopen(fileName, "rb");
-	int read = fread(out, sizeof(float), count, file);
-	//assert(read == count);
-	if (read != count) {
-		for (int i = 0; i < count; i++) {
-			out[i] = 0;
-		}
-	}
-	fclose(file);
-};
-
-void readBinFile(FILE* file, float* out, int count)
-{
-	int read = fread(out, sizeof(float), count, file);
-	assert(read == count);
-}
-
+void readBinFile(const char* fileName, float* out, int count);
+void readBinFile(FILE* file, float* out, int count);
 
 class Layer;
 
@@ -75,6 +52,11 @@ public:
 		if (binFile) {
 			readData(binFile);
 		}
+		createShapeSuffixProduct();
+	}
+
+	void createShapeSuffixProduct()
+	{
 		m_shapeSuffixProduct.resize(m_shape.size() + 1);
 		m_shapeSuffixProduct.back() = 1;
 		for (int i = m_shapeSuffixProduct.size() - 2; i >= 0; i--) {
@@ -106,6 +88,22 @@ public:
 			}
 		}
 
+	}
+
+	EnumDevice getDevice() { return m_device; }
+
+	Shape begin() { return std::vector<int>(m_shape.size(), 0); }
+
+	bool inc(Shape& it)
+	{
+		for (int i = it.size() - 1; i >= 0; i--) {
+			if (it[i] + 1 < m_shape[i]) {
+				it[i]++; 
+				return true;
+			}
+			it[i] = 0;
+		}
+		return false;
 	}
 
 	void readData(const char* binFile) {
@@ -170,6 +168,36 @@ public:
 		}
 		assert(idx < m_size);
 		return m_data[idx];
+	}
+
+	void reshape(Shape newShape)
+	{
+		bool hasMinusOne = false;
+		int minusOneIdx = 0;
+		int prod = 1;
+		for (int i = 0; i < newShape.size(); i++) {
+			int x = newShape[i];
+			if (x == -1) {
+				if (hasMinusOne) {
+					assert(false); // can't have many unknown dims
+				}
+				hasMinusOne = true;
+				minusOneIdx = i;
+			}
+			else {
+				prod *= x;
+			}
+		}
+		if (hasMinusOne) {
+			assert(m_size % prod == 0);
+			int unknownDim = m_size / prod;
+			newShape[minusOneIdx] = unknownDim;
+		} 
+		else {
+			assert(prod == m_size);
+		}
+		m_shape = newShape;
+		createShapeSuffixProduct();
 	}
 
 	Layer* getParentLayer() { return m_parentLayer; }

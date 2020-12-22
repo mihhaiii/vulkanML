@@ -2,6 +2,7 @@
 #include <iostream>
 #include "InferenceFramework.h"
 #include "OperatorFunctionInterface.h"
+#include "TensorUtils.h"
 
 static float sqr(float a) {
 	return a * a;
@@ -118,4 +119,34 @@ void test_concatenate()
 	std::cout << "Running concatenate layer tests..." << std::endl;
 
 	concatenateLayer_test1();
+}
+
+void test_tensor_split_1()
+{
+	Tensor* t = new Tensor({ 2,3,4 }, DEVICE_CPU);
+	std::vector<float> data = {
+		1,2,2,3,  1,2,2,3,  1,2,2,3,
+		1,2,2,3,  1,2,2,3,  1,2,2,3
+	};
+	t->setData(data);
+	auto ts = split(t, { 1,2,1 }, -1);
+	auto t1 = ts[0];
+	auto t2 = ts[1];
+	auto t3 = ts[2];
+	assert(t1->getSize() == 6);
+	assert(t2->getSize() == 12);
+	assert(t3->getSize() == 6);
+	for (int ti = 0; ti < ts.size(); ti++) {
+		for (int i = 0; i < ts[ti]->getSize(); i++) {
+			int x = ts[ti]->getData()[i];
+			assert(x == ti + 1);
+		}
+	}
+}
+
+void test_tensor_split()
+{
+	std::cout << "Running tensor split tests..." << std::endl;
+
+	test_tensor_split_1();
 }

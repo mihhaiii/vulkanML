@@ -16,5 +16,7 @@ int main()
 
 	test_concatenate();
 
+	test_tensor_split();
+
 	return 0;
 }
