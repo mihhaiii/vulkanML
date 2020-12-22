@@ -8,6 +8,7 @@
 #include "stb_image_resize.h"
 #include "stb_image_write.h"
 #include "OperatorFunctionInterface.h"
+#include <fstream>
 
 using namespace std;
 
@@ -42,7 +43,7 @@ int main()
 	std::vector<float> img = loadTestImage("data/meme.jpg");
 	
 	Tensor* input = Input({ imageSize,imageSize,3 });
-	Tensor* x, *x_8, *output_0, *output_1, *boxes_0, *boxes_1, *outputs;
+	Tensor* x, *x_8, *output_0, *output_1, *boxes_0, *boxes_1;
 
 	// Darknet tiny
 	x = Conv2D(16, 3, 1, "same", false)(input);
@@ -67,13 +68,13 @@ int main()
 
 	x = Conv2D(256, 3, 1, "same", false)(x);
 	x = BatchNorm()(x);
-	x = LeakyReLU()(x);
+	x_8 = x = LeakyReLU()(x);
 	x = MaxPool2D(2, 2, "same")(x);
 
 	x = Conv2D(512, 3, 1, "same", false)(x);
 	x = BatchNorm()(x);
 	x = LeakyReLU()(x);
-	x = MaxPool2D(2, 2, "same")(x);
+	x = MaxPool2D(2, 1, "same")(x);
 
 	x = Conv2D(1024, 3, 1, "same", false)(x);
 	x = BatchNorm()(x);
@@ -84,7 +85,7 @@ int main()
 	int anchors = 3, classes = 80;
 	x = Conv2D(filters, 1, 1, "same", false)(x);
 	x = BatchNorm()(x);
-	x_8 = x = LeakyReLU()(x);
+	x = LeakyReLU()(x);
 	// Yolo output
 	output_0 = Conv2D(filters * 2, 3, 1, "same", false)(x);
 	output_0 = BatchNorm()(output_0);
@@ -96,8 +97,8 @@ int main()
 	x = Conv2D(filters, 1, 1, "same", false)(x);
 	x = BatchNorm()(x);
 	x = LeakyReLU()(x);
-	//x = UpSampling2D(2)(x); // TODO
-	//x = Concat({ x, x_8 }); // TODO
+	x = UpSampling2D(2)(x); 
+	x = Concatenate()({ x, x_8 });
 	// Yolo output
 	output_1 = Conv2D(filters * 2, 3, 1, "same", false)(x);
 	output_1 = BatchNorm()(output_1);
@@ -110,8 +111,17 @@ int main()
 
 	// outputs = Lambda(yolo_nms)({boxes_0, boxes_1}); // TODO
 
-	Model* m = new Model(input, outputs);
+	Model* m = new Model(input, output_1, DEVICE_VULKAN);
+	m->readWeights("data/yolov3-tiny.weights", 5); // major, minor, revision, seen, _
+	std::cout << "Model params: " << m->getParamCount() << "\n";
 	m->run(img);
+	
+
+	std::ifstream in_file("data/yolov3-tiny.weights", std::ios::binary);
+	in_file.seekg(0, std::ios::end);
+	int file_size = in_file.tellg();
+	std::cout << "Size of the file is " << file_size << " " << "bytes which is " << file_size / 4 << " params\n";
+	in_file.close();
 
 	// show outputs TODO
 	// draw outputs TODO

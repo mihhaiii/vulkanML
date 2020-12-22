@@ -230,6 +230,8 @@ public:
 		return getOutputTensor();
 	}
 
+	virtual int getParamCount() = 0;
+
 	Tensor* operator()(Tensor* input) {
 		return of({ input });
 	}
@@ -289,8 +291,13 @@ public:
 
 		outputImage = createOwnedTensor({ out_h, out_w, filters });
 		weigths = createOwnedTensor({ size, size, c, filters });
-		if (useBias)
-			biases = createOwnedTensor({ filters });
+		biases = createOwnedTensor({ filters });
+	}
+
+	virtual int getParamCount() override
+	{
+		assert(m_isInputLinked);
+		return weigths->getSize() + (useBias ? biases->getSize() : 0);
 	}
 
 	virtual void readWeigthsFromFile(FILE* file) override
@@ -374,6 +381,10 @@ public:
 		m_outputImage = createOwnedTensor({ out_h, out_w, c });
 	}
 
+	virtual int getParamCount() override
+	{
+		return 0;
+	}
 
 	virtual void forward() {
 		assert(m_device != DEVICE_UNSPECIFIED);
@@ -418,6 +429,12 @@ public:
 		m_weights = createOwnedTensor({ m_input->getSize(), m_numNeurons });
 		m_biases = createOwnedTensor({ m_numNeurons });
 		m_output = createOwnedTensor({ m_numNeurons });
+	}
+
+	virtual int getParamCount() override
+	{
+		assert(m_isInputLinked);
+		return m_weights->getSize() + m_biases->getSize();
 	}
 
 	virtual void readWeigthsFromFile(FILE* file) override
@@ -477,6 +494,11 @@ public:
 			m_data->readData(binFile);
 	}
 
+	virtual int getParamCount() override
+	{
+		return 0;
+	}
+
 	virtual void init(const std::vector<Tensor*>& inputs) override {
 		assert(false); // input layer does not have other inputs
 	}
@@ -502,6 +524,11 @@ public:
 	{
 		assert(inputs.size() == 1);
 		m_input = inputs[0];
+	}
+
+	virtual int getParamCount() override
+	{
+		return 0;
 	}
 
 	virtual void forward() {
@@ -531,6 +558,11 @@ public:
 	{
 		assert(inputs.size() == 1);
 		m_input = inputs[0];
+	}
+
+	virtual int getParamCount() override
+	{
+		return 0;
 	}
 
 	virtual void forward() {
@@ -568,6 +600,11 @@ public:
 		out_h = h * size;
 		out_w = w * size;
 		m_output = createOwnedTensor({ out_h, out_w, c });
+	}
+
+	virtual int getParamCount() override
+	{
+		return 0;
 	}
 
 	virtual void forward() {
@@ -618,6 +655,11 @@ public:
 		m_output = createOwnedTensor({ h, w, c1 + c2 });
 	}
 
+	virtual int getParamCount() override
+	{
+		return 0;
+	}
+
 	virtual void forward() {
 		assert(m_device != DEVICE_UNSPECIFIED);
 		if (m_device == EnumDevice::DEVICE_CPU) {
@@ -656,6 +698,12 @@ public:
 
 		int filters = m_input->getShape().back(); // assuming data_format == channels_last
 		m_params = createOwnedTensor({ 4, filters });
+	}
+
+	virtual int getParamCount() override
+	{
+		assert(m_isInputLinked);
+		return m_params->getSize();
 	}
 
 	virtual void forward() {
@@ -901,16 +949,31 @@ public:
 
 	std::vector<Layer*>& layers() { return sortedLayers; }
 
-	void readWeights(const char* filename)
+	void readWeights(const char* filename, int ignoreFirst = 0)
 	{
 		FILE* file = fopen(filename, "rb");
-		
+
+		if (ignoreFirst) {
+			float* tmp = new float[ignoreFirst];
+			readBinFile(file, tmp, ignoreFirst);
+			delete[] tmp;
+		}
+
 		for (Layer* l : sortedLayers)
 		{
 			l->readWeigthsFromFile(file);
 		}
 
 		fclose(file);
+	}
+
+	int getParamCount()
+	{
+		int res = 0;
+		for (Layer* l : sortedLayers) {
+			res += l->getParamCount();
+		}
+		return res;
 	}
 	
 
