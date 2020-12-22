@@ -70,6 +70,36 @@ void upSampling2D_test1()
 	}
 }
 
+void concatenateLayer_test1()
+{
+	Tensor* input1 = Input({ 2,3,2 });
+	Tensor* input2 = Input({ 2,3,1 });
+
+	std::vector<float> data1 = {
+		1, 7, 2, 8, 3, 9,
+		4, 10, 5, 11, 6, 12
+	};
+	std::vector<float> data2 = {
+		13, 14, 15,
+		16, 17, 18
+	};
+
+	Tensor* x = Concatenate()({ input1, input2 });
+
+	Model* m1 = new Model({ input1, input2 }, x, EnumDevice::DEVICE_CPU);
+	Model* m2 = new Model({ input1, input2 }, x, EnumDevice::DEVICE_VULKAN);
+
+	float* output1 = m1->run({ data1, data2 })->getData();
+	float* output2 = m2->run({ data1, data2 })->getData();
+
+	int size = x->getSize();
+	std::vector<float> out1(output1, output1 + size);
+	std::vector<float> out2(output2, output2 + size);
+	for (int i = 0; i < size; i++) {
+		assert(abs(out1[i] - out2[i]) < 0.001);
+	}
+}
+
 void test_batch_norm()
 {
 	std::cout << "Running batch norm tests..." << std::endl;
@@ -82,4 +112,10 @@ void test_UpSampling2D()
 	std::cout << "Running upSampling2D  tests..." << std::endl;
 
 	upSampling2D_test1();
+}
+void test_concatenate()
+{
+	std::cout << "Running concatenate layer tests..." << std::endl;
+
+	concatenateLayer_test1();
 }

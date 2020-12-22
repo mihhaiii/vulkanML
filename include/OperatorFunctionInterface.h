@@ -58,3 +58,10 @@ UpSampling2DLayer& UpSampling2D(int size)
 	LayerManager::getInstance().add(l);
 	return *l;
 }
+
+ConcatenateLayer& Concatenate()
+{
+	ConcatenateLayer* l = new ConcatenateLayer();
+	LayerManager::getInstance().add(l);
+	return *l;
+}

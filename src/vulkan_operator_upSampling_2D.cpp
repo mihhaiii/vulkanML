@@ -1,9 +1,9 @@
-#include "vulkan_operator_relu.h"
 #include <vuh/array.hpp>
 #include <vuh/vuh.h>
 #include <vector>
 #include <ctime>
 #include "InstanceManager.h"
+#include "vulkan_operator_upSampling_2D.h"
 
 void vulkan_operator_upSampling_2D(vuh::Array<float>* inputs, vuh::Array<float>* outputs, int h, int w, int c, int size)
 {

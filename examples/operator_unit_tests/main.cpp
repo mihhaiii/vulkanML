@@ -14,5 +14,7 @@ int main()
 	
 	test_UpSampling2D();
 
+	test_concatenate();
+
 	return 0;
 }

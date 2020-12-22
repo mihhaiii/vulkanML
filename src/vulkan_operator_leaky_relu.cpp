@@ -1,9 +1,9 @@
-#include "vulkan_operator_relu.h"
 #include <vuh/array.hpp>
 #include <vuh/vuh.h>
 #include <vector>
 #include <ctime>
 #include "InstanceManager.h"
+#include "vulkan_operator_leaky_relu.h"
 
 
 void vulkan_operator_leaky_relu(float * inputs, float * outputs, int numInputs, float * outTime)

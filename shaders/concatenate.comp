@@ -1,0 +1,31 @@
+#version 440
+
+layout(local_size_x_id = 0) in; // workgroup dimensions specialization constants
+layout(push_constant) uniform Parameters {  // push constants
+	int h, w, c1, c2;
+} p;
+
+layout(std430, binding = 0) buffer lay0 { float input1[]; }; 
+layout(std430, binding = 1) buffer lay1 { float input2[]; }; 
+layout(std430, binding = 2) buffer lay2 { float outputs[]; }; 
+
+void main(){
+  const uint k = gl_GlobalInvocationID.x; 
+  int c = p.c1 + p.c2;
+  if(k >= c){
+      return;
+  }
+   for (int i = 0; i < p.h; i++) 
+   {
+		for (int j = 0; j < p.w; j++) 
+		{
+			if (k < p.c1){
+				outputs[i * p.w * c + j * c + k] = input1[i * p.w * p.c1 + j * p.c1 + k];
+			}
+			else {
+				outputs[i * p.w * c + j * c + k] = input2[i * p.w * p.c2 + j * p.c2 + k - p.c1];
+			}
+		}
+	}
+}
+

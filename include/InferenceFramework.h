@@ -16,6 +16,7 @@
 #include <time.h>
 #include <set>
 #include "vulkan_operator_upSampling_2D.h"
+#include "vulkan_operator_concatenate.h"
 
 using Shape = std::vector<int>;
 
@@ -231,6 +232,10 @@ public:
 
 	Tensor* operator()(Tensor* input) {
 		return of({ input });
+	}
+
+	Tensor* operator()(const std::vector<Tensor*>& inputs) {
+		return of(inputs);
 	}
 
 	virtual ~Layer() 
@@ -588,7 +593,53 @@ private:
 	Tensor* m_output;
 };
 
+class ConcatenateLayer : public Layer
+{
+public:
+	ConcatenateLayer() {} // concatenation along the last (channels) axis
 
+	virtual void init(const std::vector<Tensor*>& inputs) override
+	{
+		assert(inputs.size() == 2);
+		m_input1 = inputs[0];
+		m_input2 = inputs[1];
+
+		int h1 = m_input1->getShape()[0];
+		int w1 = m_input1->getShape()[1];
+		c1 = m_input1->getShape()[2];
+
+		int h2 = m_input2->getShape()[0];
+		int w2 = m_input2->getShape()[1];
+		c2 = m_input2->getShape()[2];
+
+		assert(h1 == h2);
+		assert(w1 == w2);
+		h = h1; w = w1;
+		m_output = createOwnedTensor({ h, w, c1 + c2 });
+	}
+
+	virtual void forward() {
+		assert(m_device != DEVICE_UNSPECIFIED);
+		if (m_device == EnumDevice::DEVICE_CPU) {
+			for (int i = 0; i < h; i++) {
+				for (int j = 0; j < w; j++) {
+					for (int k = 0; k < c1 + c2; k++) {
+						m_output->at({ i,j,k }) = k < c1 ? m_input1->at({ i, j, k }) : m_input2->at({i, j, k - c1});
+					}
+				}
+			}
+		}
+		else if (m_device == EnumDevice::DEVICE_VULKAN) {
+			vulkan_operator_concatenate(m_input1->getDeviceData(), m_input2->getDeviceData(), m_output->getDeviceData(), h, w, c1, c2);
+		}
+	}
+	Tensor* getOutputTensor() { return m_output; }
+
+private:
+	int h, w, c1, c2;
+	Tensor* m_input1, *m_input2;
+	Tensor* m_output;
+};
 
 class BatchNormalizationLayer : public Layer
 {
@@ -670,7 +721,7 @@ class SequentialModel
 public:
 	SequentialModel(EnumDevice device)
 	 : m_device(device),
-		numConv(0), numFC(0), numRELU(0), numMaxPool(0), numLeakyRELU(0), numBatchNorm(0), numUpSampling2D(0)
+		numConv(0), numFC(0), numRELU(0), numMaxPool(0), numLeakyRELU(0), numBatchNorm(0), numUpSampling2D(0), numConcatenate(0)
 	{
 	}
 
@@ -745,6 +796,15 @@ public:
 		m_layerNames.push_back("UpSampling2DLayer_" + std::to_string(numLeakyRELU++));
 		return layer;
 	}
+	ConcatenateLayer* addConcatenateLayer(int size) {
+		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
+		ConcatenateLayer* layer = new ConcatenateLayer();
+		layer->setDevice(m_device);
+		layer->of({ prevLayerOutput }); // link layer input
+		m_layers.push_back(layer);
+		m_layerNames.push_back("ConcatenateLayer_" + std::to_string(numConcatenate++));
+		return layer;
+	}
 
 	BatchNormalizationLayer* addBatchNormalizationLayer(const char* paramsFilename = nullptr) {
 		Tensor* prevLayerOutput = m_layers.back()->getOutputTensor();
@@ -791,7 +851,7 @@ private:
 	std::vector<Layer*> m_layers;
 	EnumDevice m_device;
 
-	int numConv, numFC, numRELU, numMaxPool, numLeakyRELU, numBatchNorm, numUpSampling2D;
+	int numConv, numFC, numRELU, numMaxPool, numLeakyRELU, numBatchNorm, numUpSampling2D, numConcatenate;
 	std::vector<std::string> m_layerNames;
 };
 
@@ -801,16 +861,38 @@ class Model
 public:
 	Model(Tensor* input, Tensor* output, EnumDevice device = DEVICE_CPU)
 		: m_device(device),
-		m_input(input), m_output(output)
+		m_inputs({ input }), m_output(output)
+	{
+		topologicalSort();
+		setDevice();
+	}	
+	
+	Model(const std::vector<Tensor*>& inputs, Tensor* output, EnumDevice device = DEVICE_CPU)
+		: m_device(device),
+		m_inputs(inputs), m_output(output)
 	{
 		topologicalSort();
 		setDevice();
 	}
 
+	Tensor* run(const std::vector<std::vector<float>>& inputs)
+	{
+		setDevice();
+		assert(inputs.size() == m_inputs.size());
+		for (int i = 0; i < inputs.size(); i++) {
+			m_inputs[i]->setData(inputs[i]);
+		}
+		for (Layer* l : sortedLayers) {
+			l->forward();
+		}
+		return m_output;
+	}
+
 	Tensor* run(const std::vector<float>& input)
 	{
 		setDevice();
-		m_input->setData(input);
+		assert(m_inputs.size() == 1);
+		m_inputs[0]->setData(input);
 		for (Layer* l : sortedLayers) {
 			l->forward();
 		}
@@ -838,7 +920,9 @@ private:
 		sortedLayers.clear();
 		std::set<Layer*> visited;
 
-		dfs(m_input->getParentLayer(), visited);
+		for (Tensor* t : m_inputs) {
+			dfs(t->getParentLayer(), visited);
+		}
 
 		reverse(sortedLayers.begin(), sortedLayers.end());
 
@@ -866,7 +950,7 @@ private:
 	}
 
 private:
-	Tensor* m_input;
+	std::vector<Tensor*> m_inputs;
 	Tensor* m_output;
 	std::vector<Layer*> sortedLayers;
 
