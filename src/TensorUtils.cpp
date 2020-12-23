@@ -41,9 +41,16 @@ float sigmoid(float x) {
 	return 1.f / (1.f + exp(x));
 }
 
-void sigmoid(Tensor* t) {
+void tensor_sigmoid(Tensor* t) {
 	assert(t->getDevice() == EnumDevice::DEVICE_CPU); // only supported on cpu
 	for (int i = 0; i < t->getSize(); i++) {
 		t->getData()[i] = sigmoid(t->getData()[i]);
+	}
+}
+
+void tensor_exp(Tensor* t) {
+	assert(t->getDevice() == EnumDevice::DEVICE_CPU); // only supported on cpu
+	for (int i = 0; i < t->getSize(); i++) {
+		t->getData()[i] = exp(t->getData()[i]);
 	}
 }

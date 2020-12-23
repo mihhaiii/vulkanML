@@ -3,4 +3,5 @@
 class Tensor;
 
 std::vector<Tensor*> split(Tensor* t, const std::vector<int>& dims, int axis = -1);
-void sigmoid(Tensor* t); // in-place
+void tensor_sigmoid(Tensor* t); // in-place
+void tensor_exp(Tensor* t); // in-place

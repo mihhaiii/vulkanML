@@ -352,6 +352,8 @@ public:
 			biases->readData(file);
 	}
 
+	bool getUseBias() { return useBias;  }
+
 	virtual void forward() {
 		assert(m_isInputLinked);
 		assert(m_device != DEVICE_UNSPECIFIED);
@@ -742,12 +744,14 @@ public:
 			int filters = m_input->getShape().back();
 			for (int i = 0; i < m_input->getSize(); i++) {
 				int channel = i % filters;
-				float gamma = m_params->at({ 0, channel });
-				float beta = m_params->at({ 1, channel });
+				float beta = m_params->at({ 0, channel });
+				float gamma = m_params->at({ 1, channel });
 				float mean = m_params->at({ 2, channel });
 				float variance = m_params->at({ 3, channel });
+				assert(variance >= 0);
 				data[i] = (data[i] - mean) / sqrt(variance + eps);
 				data[i] = data[i] * gamma + beta;
+				assert(!std::isnan(data[i]));
 			}
 		}
 		else if (m_device == EnumDevice::DEVICE_VULKAN) {
@@ -764,11 +768,21 @@ public:
 	void readParams(const char* filename)
 	{
 		m_params->readData(filename);
+		//validate
+		for (int i = 0; i < m_input->getShape().back(); i++) {
+			float variance = m_params->at({ 3, i });
+			assert(variance >= 0);
+		}
 	}
 	
 	void readParams(FILE* file)
 	{
 		m_params->readData(file);
+		//validate
+		for (int i = 0; i < m_input->getShape().back(); i++) {
+			float variance = m_params->at({ 3, i });
+			assert(variance >= 0);
+		}
 	}
 
 	void setParams(const std::vector<float>& inParams)
@@ -788,7 +802,7 @@ public:
 private:
 	Tensor* m_input;
 
-	Tensor* m_params; // order: gamma, beta, mean, variance (same as tf)
+	Tensor* m_params; // order: beta, gamma, mean, variance (same as darknet)
 	const float eps;
 };
 
@@ -960,6 +974,10 @@ public:
 		}
 		for (Layer* l : sortedLayers) {
 			l->forward();
+
+			//// copy data back to cpu if vulkan is used
+			//l->setDevice(DEVICE_CPU);
+			//l->setDevice(m_device);
 		}
 		return m_output;
 	}
@@ -969,8 +987,17 @@ public:
 		setDevice();
 		assert(m_inputs.size() == 1);
 		m_inputs[0]->setData(input);
+		int i = 0;
 		for (Layer* l : sortedLayers) {
 			l->forward();
+
+			//// copy data back to cpu if vulkan is used
+			//l->setDevice(DEVICE_CPU);
+			//l->setDevice(m_device);
+			//l->getOutputTensor()->setDevice(DEVICE_CPU);
+			//l->getOutputTensor()->setDevice(DEVICE_VULKAN);
+			assert(!std::isnan(l->getOutputTensor()->getData()[0]));
+			i++;
 		}
 		return m_output;
 	}
@@ -990,6 +1017,37 @@ public:
 		for (Layer* l : sortedLayers)
 		{
 			l->readWeigthsFromFile(file);
+		}
+
+		fclose(file);
+	}
+
+	void readDarknetWeights(const char* filename, int ignoreFirst = 0)
+	{
+		FILE* file = fopen(filename, "rb");
+
+		if (ignoreFirst) {
+			float* tmp = new float[ignoreFirst];
+			readBinFile(file, tmp, ignoreFirst);
+			delete[] tmp;
+		}
+
+		for (Layer* l : sortedLayers)
+		{
+			Conv2dLayer* conv = dynamic_cast<Conv2dLayer*>(l);
+			if (conv == nullptr)
+				continue;
+
+			if (conv->getUseBias()) {
+				conv->readBiases(file);
+			} 
+			else {
+				Layer * nxt = conv->getOutgoingLayers().front();
+				BatchNormalizationLayer* bn = dynamic_cast<BatchNormalizationLayer*>(nxt);
+				assert(bn);
+				bn->readParams(file);
+			}
+			conv->readWeights(file);
 		}
 
 		fclose(file);

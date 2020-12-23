@@ -16,8 +16,8 @@ void main(){
    }
    const float eps = 0.001;
    uint channel = globalId % p.filters;
-   float gamma = params[channel];
-   float beta = params[p.filters + channel];
+   float beta = params[channel];
+   float gamma = params[p.filters + channel];
    float mean = params[2 * p.filters + channel];
    float variance = params[3 * p.filters + channel];
    inputs[globalId] = (inputs[globalId] - mean) / sqrt(variance + eps);
