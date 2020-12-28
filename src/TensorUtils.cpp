@@ -38,7 +38,7 @@ std::vector<Tensor*> split(Tensor* t, const std::vector<int>& dims, int axis)
 }
 
 float sigmoid(float x) {
-	return 1.f / (1.f + exp(x));
+	return 1.f / (1.f + exp(-x));
 }
 
 void tensor_sigmoid(Tensor* t) {

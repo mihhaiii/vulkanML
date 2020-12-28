@@ -17,10 +17,14 @@
 #include <set>
 #include "vulkan_operator_upSampling_2D.h"
 #include "vulkan_operator_concatenate.h"
+#include <algorithm>
+#include <iostream>
 
 using Shape = std::vector<int>;
 
 int getShapeSize(const Shape& shape);
+
+std::ostream& operator<<(std::ostream& out, const Shape& shpe);
 
 enum EnumDevice
 {
@@ -266,6 +270,11 @@ public:
 
 	Tensor* operator()(const std::vector<Tensor*>& inputs) {
 		return of(inputs);
+	}
+
+	virtual void showInfo()
+	{
+		std::cout << typeid(*this).name() << "		output_shape: " << getOutputTensor()->getShape() << "	 params: " << getParamCount() << '\n';
 	}
 
 	virtual ~Layer() 
@@ -565,7 +574,7 @@ public:
 		assert(m_device != DEVICE_UNSPECIFIED);
 		if (m_device == EnumDevice::DEVICE_CPU) {
 			for (int i = 0; i < m_input->getSize(); i++) {
-				m_input->getData()[i] = std::max(m_input->getData()[i], 0.f);
+				m_input->getData()[i] = (std::max)(m_input->getData()[i], 0.f);
 			}
 		}
 		else if (m_device == EnumDevice::DEVICE_VULKAN) {
@@ -955,6 +964,8 @@ public:
 	{
 		topologicalSort();
 		setDevice();
+
+		showInfo();
 	}	
 	
 	Model(const std::vector<Tensor*>& inputs, Tensor* output, EnumDevice device = DEVICE_CPU)
@@ -963,6 +974,8 @@ public:
 	{
 		topologicalSort();
 		setDevice();
+
+		showInfo();
 	}
 
 	Tensor* run(const std::vector<std::vector<float>>& inputs)
@@ -1050,6 +1063,11 @@ public:
 			conv->readWeights(file);
 		}
 
+		// check that we've reached the end of the file
+		float tmp;
+		int read = fread(&tmp, sizeof(float), 1, file);
+		assert(read == 0);
+
 		fclose(file);
 	}
 
@@ -1062,6 +1080,13 @@ public:
 		return res;
 	}
 	
+	void showInfo()
+	{
+		for (Layer* l : sortedLayers)
+		{
+			l->showInfo();
+		}
+	}
 
 private:
 	void topologicalSort()

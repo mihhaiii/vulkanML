@@ -193,7 +193,7 @@ void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors)
 	class_probs->reshape({ -1, classes }); // a list of tuples of 80 elements
 
 	for (int i = 0; i < objectness->getSize(); i++) {
-		if (objectness->getData()[i] > 0.5f) {
+		if (objectness->getData()[i] > 0.2f) {
 			float mx = -1;
 			int mxIdx = 0;
 			for (int j = 0; j < classes; j++) {
@@ -202,7 +202,7 @@ void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors)
 					mxIdx = j;
 				}
 			}
-			std::cout << classNames[mxIdx] << "\n";
+			std::cout << classNames[mxIdx] << class_probs->at({i, mxIdx}) << " -> " << class_probs->at({ i, mxIdx }) * objectness->getData()[i] << "\n";
 		}
 	}
 }
@@ -258,11 +258,8 @@ int main()
 	x = Conv2D(filters, 1, 1, "same", false)(x);
 	x = BatchNorm()(x);
 	x = LeakyReLU()(x);
-	// Yolo output
-	output_0 = Conv2D(filters * 2, 3, 1, "same", false)(x);
-	output_0 = BatchNorm()(output_0);
-	output_0 = LeakyReLU()(output_0);
-	output_0 = Conv2D(anchors * (classes + 5), 1, 1, "same", true)(output_0);
+	output_0 = x;
+	
 	
 	// YoloConvTiny of (x, x_8)
 	filters = 128;
@@ -271,7 +268,16 @@ int main()
 	x = LeakyReLU()(x);
 	x = UpSampling2D(2)(x); 
 	x = Concatenate()({ x, x_8 });
+
 	// Yolo output
+	filters = 256;
+	output_0 = Conv2D(filters * 2, 3, 1, "same", false)(output_0);
+	output_0 = BatchNorm()(output_0);
+	output_0 = LeakyReLU()(output_0);
+	output_0 = Conv2D(anchors * (classes + 5), 1, 1, "same", true)(output_0);
+
+	// Yolo output
+	filters = 128;
 	output_1 = Conv2D(filters * 2, 3, 1, "same", false)(x);
 	output_1 = BatchNorm()(output_1);
 	output_1 = LeakyReLU()(output_1);
@@ -283,7 +289,7 @@ int main()
 
 	// outputs = Lambda(yolo_nms)({boxes_0, boxes_1}); // TODO
 
-	Model* m = new Model(input, output_1, DEVICE_CPU);
+	Model* m = new Model(input, output_1, DEVICE_VULKAN);
 	m->readDarknetWeights("data/yolov3-tiny.weights", 5); // major, minor, revision, seen, _
 	std::cout << "Model params: " << m->getParamCount() << "\n";
 	m->run(img);

@@ -11,6 +11,17 @@ int getShapeSize(const Shape& shape) {
 	return total;
 }
 
+std::ostream& operator<<(std::ostream& out, const Shape& shape)
+{
+	out << "(";
+	out << shape[0];
+	for (int i = 1; i < shape.size(); i++) {
+		out << ", " << shape[i];
+	}
+	out << ")";
+	return out;
+}
+
 void readBinFile(const char* fileName, float* out, int count) {
 	FILE* file = fopen(fileName, "rb");
 	int read = fread(out, sizeof(float), count, file);
