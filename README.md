@@ -21,6 +21,8 @@ Build & Run instructions
 * cmake --build .
 * (windows) open vulkanML.sln, set test_project as startup project and hit F5
 
+#### Important: To specify 64 bit architecture for Visual Studio add -A x64 option to the cmake generate commands above
+
 test_project is an example project that links the vulkanML static library and uses it to make a simple MNIST inference.
 
 To create a new project:
