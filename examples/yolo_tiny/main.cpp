@@ -10,6 +10,7 @@
 #include "OperatorFunctionInterface.h"
 #include <fstream>
 #include "TensorUtils.h"
+#include <opencv2/opencv.hpp>
 
 using namespace std;
 
@@ -21,86 +22,86 @@ std::vector<std::vector<float>> tiny_yolo_anchors0;
 std::vector<std::vector<float>> tiny_yolo_anchors1;
 
 std::vector<std::string> classNames = { 
- "person			"
-,"bicycle			"
-,"car				"
-,"motorbike			"
-,"aeroplane			"
-,"bus				"
-,"train				"
-,"truck				"
-,"boat				"
-,"traffic light		"
-,"fire hydrant		"
-,"stop sign			"
-,"parking meter		"
-,"bench				"
-,"bird				"
-,"cat				"
-,"dog				"
-,"horse				"
-,"sheep				"
-,"cow				"
-,"elephant			"
-,"bear				"
-,"zebra				"
-,"giraffe			"
-,"backpack			"
-,"umbrella			"
-,"handbag			"
-,"tie				"
-,"suitcase			"
-,"frisbee			"
-,"skis				"
-,"snowboard			"
-,"sports ball		"
-,"kite				"
-,"baseball bat		"
-,"baseball glove	"
-,"skateboard		"
-,"surfboard			"
-,"tennis racket		"
-,"bottle			"
-,"wine glass		"
-,"cup				"
-,"fork				"
-,"knife				"
-,"spoon				"
-,"bowl				"
-,"banana			"
-,"apple				"
-,"sandwich			"
-,"orange			"
-,"broccoli			"
-,"carrot			"
-,"hot dog			"
-,"pizza				"
-,"donut				"
-,"cake				"
-,"chair				"
-,"sofa				"
-,"pottedplant		"
-,"bed				"
-,"diningtable		"
-,"toilet			"
-,"tvmonitor			"
-,"laptop			"
-,"mouse				"
-,"remote			"
-,"keyboard			"
-,"cell phone		"
-,"microwave			"
-,"oven				"
-,"toaster			"
-,"sink				"
-,"refrigerator		"
-,"book				"
-,"clock				"
-,"vase				"
-,"scissors			"
-,"teddy bear		"
-,"hair drier		"
-,"toothbrush		"
+ "person"
+,"bicycle"
+,"car"
+,"motorbike"
+,"aeroplane"
+,"bus"
+,"train"
+,"truck"
+,"boat"
+,"traffic light"
+,"fire hydrant"
+,"stop sign"
+,"parking meter"
+,"bench"
+,"bird"
+,"cat"
+,"dog"
+,"horse"
+,"sheep"
+,"cow"
+,"elephant"
+,"bear"
+,"zebra"
+,"giraffe"
+,"backpack"
+,"umbrella"
+,"handbag"
+,"tie"
+,"suitcase"
+,"frisbee"
+,"skis"
+,"snowboard"
+,"sports ball"
+,"kite"
+,"baseball bat"
+,"baseball glove"
+,"skateboard"
+,"surfboard"
+,"tennis racket"
+,"bottle"
+,"wine glass"
+,"cup"
+,"fork"
+,"knife"
+,"spoon"
+,"bowl"
+,"banana"
+,"apple"
+,"sandwich"
+,"orange"
+,"broccoli"
+,"carrot"
+,"hot dog"
+,"pizza"
+,"donut"
+,"cake"
+,"chair"
+,"sofa"
+,"pottedplant"
+,"bed"
+,"diningtable"
+,"toilet"
+,"tvmonitor"
+,"laptop"
+,"mouse"
+,"remote"
+,"keyboard"
+,"cell phone"
+,"microwave"
+,"oven"
+,"toaster"
+,"sink"
+,"refrigerator"
+,"book"
+,"clock"
+,"vase"
+,"scissors"
+,"teddy bear"
+,"hair drier"
+,"toothbrush"
 };
 
 void initAnchors()
@@ -115,22 +116,23 @@ std::vector<float> loadTestImage(const char* filename) {
 		&width,
 		&height,
 		&channels,
-		0);
-	assert(channels == 3);
-	unsigned char* resizedImage = new unsigned char[imageSize * imageSize * channels];
-	stbir_resize_uint8(image, width, height, 0, resizedImage, imageSize, imageSize, 0, channels);
+		3);
+	//assert(channels == 3);
+	unsigned char* resizedImage = new unsigned char[imageSize * imageSize * 3];
+	stbir_resize_uint8(image, width, height, 0, resizedImage, imageSize, imageSize, 0, 3);
 
-	std::vector<float> img(imageSize * imageSize * channels);
+	std::vector<float> img(imageSize * imageSize * 3);
 	for (int i = 0; i < img.size(); i++) {
 		img[i] = (float)resizedImage[i] / 255.0;
 	}
-	stbi_write_png("my_image_output.png", imageSize, imageSize, channels, resizedImage, 0);
+	stbi_write_png("my_image_output.png", imageSize, imageSize, 3, resizedImage, 0);
 	delete[] image;
 	delete[] resizedImage;
 	return img;
 }
 
-void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors)
+using namespace cv;
+void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors, Mat& image)
 {
 	t->reshape({ t->getShape()[0], t->getShape()[1], anchors, classes + 5 });
 	// t.shape = (grid, grid, anchors, (x, y, w, h, obj, ...classes))
@@ -197,17 +199,34 @@ void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors)
 	objectness->reshape({ -1 });  // of list of floats
 	class_probs->reshape({ -1, classes }); // a list of tuples of 80 elements
 
+	int rows = image.rows;
+	int cols = image.cols;
+
+
 	for (int i = 0; i < objectness->getSize(); i++) {
 		if (objectness->getData()[i] > 0.2f) {
 			float mx = -1;
 			int mxIdx = 0;
 			for (int j = 0; j < classes; j++) {
-				if (class_probs->at({ i, j }) > mx) {
-					mx = class_probs->at({ i, j });
+				float prob = class_probs->at({ i, j }) * objectness->getData()[i];
+				if (prob > 0.5f && prob > mx) {
+					mx = prob;
 					mxIdx = j;
 				}
 			}
-			std::cout << classNames[mxIdx] << class_probs->at({i, mxIdx}) << " -> " << class_probs->at({ i, mxIdx }) * objectness->getData()[i] << "\n";
+			if (mx == -1)
+				continue;
+			std::cout << classNames[mxIdx] << class_probs->at({i, mxIdx}) << " -> " << mx << "\n";
+			int x1 = box_x1y1->at({ i,0 }) * rows;
+			int y1 = box_x1y1->at({ i,1 }) * cols;
+			int x2 = box_x2y2->at({ i,0 }) * rows;
+			int y2 = box_x2y2->at({ i,1 }) * cols;
+
+			rectangle(image, Point(y1, x1), Point(y2, x2), Scalar(255, 0, 0), 2, 8, 0);
+			//draw the rect defined by r with line thickness 1 and Blue color
+
+			putText(image, classNames[mxIdx] + std::to_string(mx) , Point(y1, x1),
+				FONT_HERSHEY_COMPLEX_SMALL, 1, Scalar(0, 0, 200));
 		}
 	}
 }
@@ -219,12 +238,23 @@ void inspect(Tensor* x)
 	v.assign(data, data + x->getSize());
 }
 
+
 int main()
 {
-	std::cout << "Yolo tiny" << std::endl;
+	std::cout << "Yolo tiny\n";
+	InstanceManger::getInstance();
+
+	Mat image;
+	image = imread("data/meme.jpg", 1);
+	if (!image.data)
+	{
+		printf("No image data \n");
+		return -1;
+	}
+
 	initAnchors();
 
-	std::vector<float> img = loadTestImage("data/street.jpg");
+	std::vector<float> img = loadTestImage("data/meme.jpg");
 	
 	Tensor* x, *x_8, *output_0, *output_1, *boxes_0, *boxes_1, *x_tmp, *x_tmp1, *input;
 	input = x_tmp = Input({ imageSize,imageSize,3 });
@@ -309,8 +339,15 @@ int main()
 	inspect(x_tmp);
 	inspect(x_tmp1);
 
-	yolo_boxes(output_0, tiny_yolo_anchors0);
-	yolo_boxes(output_1, tiny_yolo_anchors1);
+	yolo_boxes(output_0, tiny_yolo_anchors0, image);
+	yolo_boxes(output_1, tiny_yolo_anchors1, image);
+
+	imwrite("myImageWithRect.jpg", image);
+
+	namedWindow("Display Image");
+	imshow("Display Image", image);
+	waitKey(0);
+
 
 	std::ifstream in_file("data/yolov3-tiny.weights", std::ios::binary);
 	in_file.seekg(0, std::ios::end);

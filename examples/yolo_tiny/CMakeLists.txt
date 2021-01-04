@@ -6,6 +6,10 @@ project(yolo_tiny)
 add_executable(yolo_tiny main.cpp)
 target_link_libraries(yolo_tiny PUBLIC vulkanML)
 
+find_package( OpenCV REQUIRED )
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+target_link_libraries(yolo_tiny PUBLIC ${OpenCV_LIBS})
+
 
 MESSAGE("Copying test images to the binaries directory")
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/data"

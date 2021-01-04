@@ -209,6 +209,7 @@ public:
 	~Tensor() {
 		delete[] m_data;
 		delete m_deviceData;
+		m_deviceData = nullptr;
 	}
 
 	friend class Layer;
@@ -357,7 +358,7 @@ public:
 
 		EnumDevice oldDevice = weigths->getDevice();
 		weigths->setDevice(DEVICE_CPU);
-		
+		int sz =  tmp->getSize();
 		for (int i = 0; i < size; i++) {
 			for (int j = 0; j < size; j++) {
 				for (int k = 0; k < c; k++) {
