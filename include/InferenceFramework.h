@@ -351,6 +351,27 @@ public:
 		weigths->readData(file);
 	}
 
+	void readWeightsAndTranspose(FILE* file) {
+		Tensor* tmp = new Tensor({filters, c, size, size}, DEVICE_CPU);
+		tmp->readData(file);
+
+		EnumDevice oldDevice = weigths->getDevice();
+		weigths->setDevice(DEVICE_CPU);
+		
+		for (int i = 0; i < size; i++) {
+			for (int j = 0; j < size; j++) {
+				for (int k = 0; k < c; k++) {
+					for (int l = 0; l < filters; l++) {
+						weigths->at({ i,j,k,l }) = tmp->at({ l, k, i, j }); // from darknet format to tf format
+					}
+				}
+			}
+		}
+
+		weigths->setDevice(oldDevice);
+		delete tmp;
+	}
+
 	void readBiases(const char* binFile) {
 		if (useBias)
 			biases->readData(binFile);
@@ -371,6 +392,8 @@ public:
 		}
 		else if (m_device == DEVICE_VULKAN) {
 			vulkan_operator_conv2d(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
+			outputImage->setDevice(DEVICE_CPU);
+			outputImage->setDevice(DEVICE_VULKAN);
 		}
 	}
 
@@ -1060,7 +1083,7 @@ public:
 				assert(bn);
 				bn->readParams(file);
 			}
-			conv->readWeights(file);
+			conv->readWeightsAndTranspose(file);
 		}
 
 		// check that we've reached the end of the file

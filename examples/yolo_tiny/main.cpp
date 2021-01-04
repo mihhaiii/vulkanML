@@ -144,6 +144,11 @@ void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors)
 	Tensor* objectness = tensors[2];
 	Tensor* class_probs = tensors[3];
 	tensor_sigmoid(box_xy);
+
+	std::vector<float> obj;
+	float* rawData = objectness->getData();
+	obj.assign(rawData, rawData + objectness->getSize());
+
 	tensor_sigmoid(objectness);
 	tensor_sigmoid(class_probs);
 
@@ -207,20 +212,27 @@ void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors)
 	}
 }
 
+void inspect(Tensor* x)
+{
+	float* data = x->getData();
+	std::vector<float> v;
+	v.assign(data, data + x->getSize());
+}
+
 int main()
 {
 	std::cout << "Yolo tiny" << std::endl;
 	initAnchors();
 
-	std::vector<float> img = loadTestImage("data/meme.jpg");
+	std::vector<float> img = loadTestImage("data/street.jpg");
 	
-	Tensor* input = Input({ imageSize,imageSize,3 });
-	Tensor* x, *x_8, *output_0, *output_1, *boxes_0, *boxes_1;
+	Tensor* x, *x_8, *output_0, *output_1, *boxes_0, *boxes_1, *x_tmp, *x_tmp1, *input;
+	input = x_tmp = Input({ imageSize,imageSize,3 });
 
 	// Darknet tiny
-	x = Conv2D(16, 3, 1, "same", false)(input);
+	x_tmp1 = x = Conv2D(16, 3, 1, "same", false)(input);
 	x = BatchNorm()(x);
-	//x = LeakyReLU()(x);
+	x = LeakyReLU()(x);
 	x = MaxPool2D(2, 2, "same")(x);
 
 	x = Conv2D(32, 3, 1, "same", false)(x);
@@ -294,6 +306,9 @@ int main()
 	std::cout << "Model params: " << m->getParamCount() << "\n";
 	m->run(img);
 	
+	inspect(x_tmp);
+	inspect(x_tmp1);
+
 	yolo_boxes(output_0, tiny_yolo_anchors0);
 	yolo_boxes(output_1, tiny_yolo_anchors1);
 
