@@ -26,6 +26,9 @@
 #include <fstream>
 #include "InstanceManager.h"
 #include "OperatorFunctionInterface.h"
+#include <filesystem>
+#include <comdef.h>  
+#include <stdlib.h>
 
 void test_vulkan_operator_FC()
 {
@@ -238,6 +241,19 @@ std::vector<float> loadImage(const char * filename, int& width, int& height, int
 	}
 	return img;
 }
+
+void loadImage(const char* filename, int& width, int& height, int& channels, float* dest) {
+	// read an input image
+	unsigned char* image = stbi_load(filename,
+		&width,
+		&height,
+		&channels,
+		0);
+	for (int i = 0; i < width * height * channels; i++) {
+		dest[i] = (float)image[i] / 255.0;
+	}
+}
+
 void test_mnist_simple()
 {
 	// read model's weights and biases
@@ -470,43 +486,45 @@ void test_conv_net_Functional_API()
 
 void test_simle_mnist_model_with_batches()
 {
+
+	namespace fs = std::filesystem;
+	Tensor* input = Input({ 32,28,28,1 });
+	Tensor* train_images = Input({ 600,28,28,1 });
+	train_images->setDevice(DEVICE_CPU);
+	//Tensor* train_images = new Tensor({ 600,28,28,1 }, DEVICE_CPU);
+	Tensor* train_labels = new Tensor({ 600 }, DEVICE_CPU);
+	int idx = 0;
 	int h, w, c;
-	std::vector<float> img = loadImage("trainingSample/8/img_171.jpg", h, w, c);
-	std::vector<float> img1 = loadImage("trainingSample/5/img_99.jpg", h, w, c);
-	img.insert(img.end(), img1.begin(), img1.end());
+	for (int digit = 0; digit < 10; digit++)
+	{
+		const std::string path = "trainingSample/" + std::to_string(digit);
+		for (auto& p : fs::recursive_directory_iterator(path.c_str()))
+		{
+			std::cout << p.path() << '\n';
+			float& dest = train_images->at({ idx,0,0,0 });
+			loadImage(p.path().string().c_str(), h, w, c, &dest);
+			train_labels->getData()[idx] = digit;
+			idx++;
+		}
+	}
 
-	Tensor* x, *y;
-	x = Input({ 2,28,28,1 }); // batch_size = 2
-
-	y = Dense(64)(x);
+	Tensor *y;
+	y = Dense(64)(input);
 	y = ReLU()(y);
 	y = Dense(10)(y);
 
-	Model* m = new Model(x, y, EnumDevice::DEVICE_VULKAN);
-
-
-	std::ifstream in_file("conv_mnist/simple_conv_mnist_batches", std::ios::binary);
-	in_file.seekg(0, std::ios::end);
-	int file_size = in_file.tellg();
-	std::cout << "Size of the file is" << " " << file_size << " " << "bytes\n";
-	in_file.close();
+	Model* m = new Model(input, y, EnumDevice::DEVICE_VULKAN);
 
 	m->readWeights("conv_mnist/simple_conv_mnist_batches");
 
-	x = m->run(img);
+	//m->fit(train_images, train_labels);
 
-	float* output = x->getData();
-	operator_softmax_cpu(output, output, 10);
-	operator_softmax_cpu(output + 10, output + 10, 10);
-	auto itMax = std::max_element(output, output + 10);
-	auto itMax1 = std::max_element(output + 10, output + 20);
-	int digit = itMax - output;
-	int digit1 = itMax1 - (output + 10);
-	float prob = *itMax;
-	float prob1= *itMax1;
-	std::cout << "Digit is " << digit << " with probability " << prob << '\n';
-	std::cout << "Digit is " << digit1 << " with probability " << prob1 << '\n';
-	std::cout << "Run time: " << time << '\n';
+	m->run();
+	float* output = y->getData();
+	for (int i = 0; i < y->getSize(); i++) {
+		if (i % 10 == 0) std::cout << "\n";
+		std::cout << output[i] << " ";
+	}
 }
 
 
@@ -532,7 +550,10 @@ int main()
 
 	//test_conv_net1();
 	//test_conv_net_Functional_API();
-
+	
+	/* initialize random seed: */
+	srand(time(NULL));
+	
 	test_simle_mnist_model_with_batches();
 
 	//test_vulkan_operator_FC1();

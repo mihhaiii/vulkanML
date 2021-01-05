@@ -19,6 +19,7 @@
 #include "vulkan_operator_concatenate.h"
 #include <algorithm>
 #include <iostream>
+#include <stdlib.h>
 
 using Shape = std::vector<int>;
 
@@ -204,6 +205,19 @@ public:
 		createShapeSuffixProduct();
 	}
 
+	void randomWeightInit(const float factor)
+	{
+		if (m_data == nullptr) {
+			m_data = new float[m_size];
+		}
+		for (int i = 0; i < m_size; i++) {
+			m_data[i] = ((double)rand() / (RAND_MAX)) * factor;
+		}
+		if (m_device * DEVICE_VULKAN) {
+			m_deviceData->fromHost(m_data, m_data + m_size);
+		}
+	}
+
 	Layer* getParentLayer() { return m_parentLayer; }
 
 	~Tensor() {
@@ -277,6 +291,9 @@ public:
 	{
 		std::cout << typeid(*this).name() << "		output_shape: " << getOutputTensor()->getShape() << "	 params: " << getParamCount() << '\n';
 	}
+
+	virtual void randomWeightInit(const float factor) {}
+	virtual void backprop() {}
 
 	virtual ~Layer() 
 	{
@@ -534,6 +551,12 @@ public:
 			vulkan_operator_FC(m_input->getDeviceData(), m_weights->getDeviceData(), m_biases->getDeviceData(),
 				m_output->getDeviceData(), m_numNeuronsLastLayer, m_numNeurons, m_batch_size, m_applyRelu);
 		}
+	}
+
+	virtual void randomWeightInit(const float factor)
+	{
+		m_weights->randomWeightInit(factor);
+		m_biases->randomWeightInit(factor);
 	}
 
 	Tensor* getOutputTensor() { return m_output; }
@@ -1016,10 +1039,6 @@ public:
 		}
 		for (Layer* l : sortedLayers) {
 			l->forward();
-
-			//// copy data back to cpu if vulkan is used
-			//l->setDevice(DEVICE_CPU);
-			//l->setDevice(m_device);
 		}
 		return m_output;
 	}
@@ -1032,14 +1051,22 @@ public:
 		int i = 0;
 		for (Layer* l : sortedLayers) {
 			l->forward();
-
-			//// copy data back to cpu if vulkan is used
-			//l->setDevice(DEVICE_CPU);
-			//l->setDevice(m_device);
-			//l->getOutputTensor()->setDevice(DEVICE_CPU);
-			//l->getOutputTensor()->setDevice(DEVICE_VULKAN);
 			assert(!std::isnan(l->getOutputTensor()->getData()[0]));
 			i++;
+		}
+		return m_output;
+	}
+
+	Tensor* run(float* input, const int size)
+	{
+		return run(std::vector<float>(input, input + size));
+	}
+
+	Tensor* run()
+	{
+		setDevice();
+		for (Layer* l : sortedLayers) {
+			l->forward();
 		}
 		return m_output;
 	}
@@ -1117,7 +1144,39 @@ public:
 		}
 	}
 
+	void fit(Tensor* x, Tensor* y)
+	{
+		int samples = x->getShape().front();
+		assert(samples == y->getShape().front());
+		int numInputsPerSample = x->getSize() / samples;
+		const int batch_size = 32;
+
+		const int iterations = (samples + batch_size - 1) / batch_size;
+
+		randomWeightInit();
+
+		for (int iter = 0; iter < iterations; iter++)
+		{
+			int firstSampleFromBatch = iter * batch_size;
+			int lastSampleFromBatch = (std::min)(firstSampleFromBatch + batch_size, samples);
+
+			Tensor* out = run(&x->getData()[firstSampleFromBatch * numInputsPerSample], batch_size * numInputsPerSample);
+			
+			for (int l = sortedLayers.size() - 1; l >= 0; l--) 
+			{
+				sortedLayers[l]->backprop();
+			}
+		}
+	}
+
 private:
+	void randomWeightInit()
+	{
+		for (Layer* l : sortedLayers) {
+			l->randomWeightInit(0.01);
+		}
+	}
+
 	void topologicalSort()
 	{
 		sortedLayers.clear();
