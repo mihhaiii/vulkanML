@@ -489,9 +489,11 @@ public:
 	{
 		assert(inputs.size() == 1);
 		m_input = inputs[0];
-		m_weights = createOwnedTensor({ m_input->getSize(), m_numNeurons });
+		m_batch_size = m_input->getShape().front(); // first dim is the batch size
+		m_numNeuronsLastLayer = m_input->getSize() / m_batch_size;
+		m_weights = createOwnedTensor({ m_numNeuronsLastLayer, m_numNeurons });
 		m_biases = createOwnedTensor({ m_numNeurons });
-		m_output = createOwnedTensor({ m_numNeurons });
+		m_output = createOwnedTensor({ m_batch_size, m_numNeurons });
 	}
 
 	virtual int getParamCount() override
@@ -526,11 +528,11 @@ public:
 		assert(m_device != DEVICE_UNSPECIFIED);
 		if (m_device == DEVICE_CPU) {
 			operator_FC_cpu(m_input->getData(), m_weights->getData(), m_biases->getData(), m_output->getData(),
-				m_input->getSize(), m_numNeurons, m_applyRelu);
+				m_numNeuronsLastLayer, m_numNeurons, m_batch_size, m_applyRelu);
 		}
 		else if (m_device == DEVICE_VULKAN) {
 			vulkan_operator_FC(m_input->getDeviceData(), m_weights->getDeviceData(), m_biases->getDeviceData(),
-				m_output->getDeviceData(), m_input->getSize(), m_numNeurons, m_applyRelu);
+				m_output->getDeviceData(), m_numNeuronsLastLayer, m_numNeurons, m_batch_size, m_applyRelu);
 		}
 	}
 
@@ -539,6 +541,8 @@ public:
 private:
 
 	int m_numNeurons;
+	int m_batch_size;
+	int m_numNeuronsLastLayer;
 	Tensor* m_input;
 	Tensor* m_weights;
 	Tensor* m_biases;
@@ -552,6 +556,7 @@ public:
 	InputLayer(const Shape& shape, const char* binFile = nullptr)
 		: m_shape(shape)
 	{
+		// first dim is the batch_size
 		m_data = createOwnedTensor(shape);
 		if (binFile)
 			m_data->readData(binFile);

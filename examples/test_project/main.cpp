@@ -47,7 +47,7 @@ void test_vulkan_operator_FC()
 		biases[i] = (float)rand() / (RAND_MAX);
 	}
 	float timeVulkan = 0;
-	vulkan_operator_FC(inputs, weights, biases, outputs_vk, numInputs, numOutputs, true/*apply relu*/, &timeVulkan);
+	vulkan_operator_FC(inputs, weights, biases, outputs_vk, numInputs, numOutputs, 1/*batch_size*/, true/*apply relu*/, &timeVulkan);
 	clock_t start = clock();
 	operator_FC_cpu(inputs, weights, biases, outputs_cpu, numInputs, numOutputs);
 	float timeCPU = (float)(clock() - start) / CLOCKS_PER_SEC;
@@ -63,6 +63,30 @@ void test_vulkan_operator_FC()
 	delete[] biases;
 	delete[] outputs_vk;
 	delete[] outputs_cpu;
+}
+
+void test_vulkan_operator_FC1()
+{
+	Tensor* x, * y;
+	x = Input({ 2, 2 }); // batch_size = 2
+	y = Dense(2)(x);
+
+	Model* m = new Model(x, y, DEVICE_VULKAN);
+
+	int paramCount = m->getParamCount();
+	std::vector<float> weights(paramCount, 1.f);
+	FILE* file = fopen("myfile.bin", "wb");
+	fwrite(&weights[0], sizeof(float), paramCount, file);
+	fclose(file);
+
+	m->readWeights("myfile.bin"); // all weigts set to 1
+	
+	m->run({ 1,2,3,4 });
+
+	assert(y->getData()[0] == 4);
+	assert(y->getData()[1] == 4);
+	assert(y->getData()[2] == 8);
+	assert(y->getData()[3] == 8);
 }
 
 void test_vulkan_reduce()
@@ -442,6 +466,50 @@ void test_conv_net_Functional_API()
 	std::cout << "Run time: " << time << '\n';
 }
 
+
+
+void test_simle_mnist_model_with_batches()
+{
+	int h, w, c;
+	std::vector<float> img = loadImage("trainingSample/8/img_171.jpg", h, w, c);
+	std::vector<float> img1 = loadImage("trainingSample/5/img_99.jpg", h, w, c);
+	img.insert(img.end(), img1.begin(), img1.end());
+
+	Tensor* x, *y;
+	x = Input({ 2,28,28,1 }); // batch_size = 2
+
+	y = Dense(64)(x);
+	y = ReLU()(y);
+	y = Dense(10)(y);
+
+	Model* m = new Model(x, y, EnumDevice::DEVICE_VULKAN);
+
+
+	std::ifstream in_file("conv_mnist/simple_conv_mnist_batches", std::ios::binary);
+	in_file.seekg(0, std::ios::end);
+	int file_size = in_file.tellg();
+	std::cout << "Size of the file is" << " " << file_size << " " << "bytes\n";
+	in_file.close();
+
+	m->readWeights("conv_mnist/simple_conv_mnist_batches");
+
+	x = m->run(img);
+
+	float* output = x->getData();
+	operator_softmax_cpu(output, output, 10);
+	operator_softmax_cpu(output + 10, output + 10, 10);
+	auto itMax = std::max_element(output, output + 10);
+	auto itMax1 = std::max_element(output + 10, output + 20);
+	int digit = itMax - output;
+	int digit1 = itMax1 - (output + 10);
+	float prob = *itMax;
+	float prob1= *itMax1;
+	std::cout << "Digit is " << digit << " with probability " << prob << '\n';
+	std::cout << "Digit is " << digit1 << " with probability " << prob1 << '\n';
+	std::cout << "Run time: " << time << '\n';
+}
+
+
 int main()
 {
 	//test_vulkan_operator_FC();
@@ -462,7 +530,11 @@ int main()
 
 	//test_conv_net();
 
-	test_conv_net1();
-	test_conv_net_Functional_API();
+	//test_conv_net1();
+	//test_conv_net_Functional_API();
+
+	test_simle_mnist_model_with_batches();
+
+	//test_vulkan_operator_FC1();
 	return 0;
 }
