@@ -134,10 +134,11 @@ std::vector<float> loadTestImage(const char* filename) {
 using namespace cv;
 void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors, Mat& image)
 {
-	t->reshape({ t->getShape()[0], t->getShape()[1], anchors, classes + 5 });
+	t->reshape({ t->getShape()[0], t->getShape()[1], t->getShape()[2], anchors, classes + 5 });
 	// t.shape = (grid, grid, anchors, (x, y, w, h, obj, ...classes))
-	int h = t->getShape()[0];
-	int w = t->getShape()[1];
+	int batch_size = t->getShape()[0];
+	int h = t->getShape()[1];
+	int w = t->getShape()[2];
 
 	t->setDevice(DEVICE_CPU);
 	auto tensors = split(t, { 2,2,1,classes }, -1);
@@ -154,24 +155,29 @@ void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors, Mat& i
 	tensor_sigmoid(objectness);
 	tensor_sigmoid(class_probs);
 
-	for (int i = 0; i < h; i++) {
-		for (int j = 0; j < w; j++) {
-			for (int a = 0; a < anchors; a++) {
-				float& x = box_xy->at({ i,j,a,0 });
-				float& y = box_xy->at({ i,j,a,1 });
-				x = (x + i) / h;
-				y = (y + j) / w;
+	for (int b = 0; b < batch_size; b++) {
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				for (int a = 0; a < anchors; a++) {
+					float& x = box_xy->at({ b,i,j,a,0 });
+					float& y = box_xy->at({ b,i,j,a,1 });
+					x = (x + i) / h;
+					y = (y + j) / w;
+				}
 			}
 		}
 	}
+	
 
 	tensor_exp(box_wh);
-	for (int i = 0; i < h; i++) {
-		for (int j = 0; j < w; j++) {
-			for (int a = 0; a < anchors; a++) {
-				for (int c = 0; c < 2; c++) {
-					float& x = box_wh->at({ i,j,a,c });
-					x *= yolo_anchors[a][c];
+	for (int b = 0; b < batch_size; b++) {
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				for (int a = 0; a < anchors; a++) {
+					for (int c = 0; c < 2; c++) {
+						float& x = box_wh->at({ b,i,j,a,c });
+						x *= yolo_anchors[a][c];
+					}
 				}
 			}
 		}
@@ -180,16 +186,18 @@ void yolo_boxes(Tensor* t, std::vector<std::vector<float>>& yolo_anchors, Mat& i
 	Tensor* box_x1y1 = new Tensor(box_xy->getShape(), DEVICE_CPU);
 	Tensor* box_x2y2 = new Tensor(box_xy->getShape(), DEVICE_CPU);
 
-	for (int i = 0; i < h; i++) {
-		for (int j = 0; j < w; j++) {
-			for (int a = 0; a < anchors; a++) {
-				for (int c = 0; c < 2; c++) {
-					float& x1y1 = box_x1y1->at({ i,j,a,c });
-					float& x2y2 = box_x2y2->at({ i,j,a,c });
-					float& wh = box_wh->at({ i,j,a,c });
-					float& xy = box_xy->at({ i,j,a,c });
-					x1y1 = xy - wh / 2.f;
-					x2y2 = xy + wh / 2.f;
+	for (int b = 0; b < batch_size; b++) {
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				for (int a = 0; a < anchors; a++) {
+					for (int c = 0; c < 2; c++) {
+						float& x1y1 = box_x1y1->at({ b,i,j,a,c });
+						float& x2y2 = box_x2y2->at({ b,i,j,a,c });
+						float& wh = box_wh->at({ b,i,j,a,c });
+						float& xy = box_xy->at({ b,i,j,a,c });
+						x1y1 = xy - wh / 2.f;
+						x2y2 = xy + wh / 2.f;
+					}
 				}
 			}
 		}
@@ -255,9 +263,11 @@ int main()
 	initAnchors();
 
 	std::vector<float> img = loadTestImage("data/meme.jpg");
+	std::vector<float> img1 = loadTestImage("data/street.jpg");
+	img.insert(img.end(), img1.begin(), img1.end());
 	
 	Tensor* x, *x_8, *output_0, *output_1, *boxes_0, *boxes_1, *x_tmp, *x_tmp1, *input;
-	input = x_tmp = Input({ imageSize,imageSize,3 });
+	input = x_tmp = Input({ 2,imageSize,imageSize,3 });
 
 	// Darknet tiny
 	x_tmp1 = x = Conv2D(16, 3, 1, "same", false)(input);

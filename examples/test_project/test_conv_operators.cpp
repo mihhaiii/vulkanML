@@ -41,8 +41,8 @@ void test_conv2d_1()
 	std::vector<float> outputImage(9);
 	std::vector<float> outputImageVk(9);
 
-	operator_conv2d_cpu(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
-	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
+	operator_conv2d_cpu(inputImage, kernels, kernelBiases, 1, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
+	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, 1, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
 	
 	std::vector<float> expected{8, 10, 12, 9, 12, 15, 8, 10, 12};
 	for (int i = 0; i < outputImage.size(); i++) {
@@ -77,8 +77,8 @@ void test_conv2d_1_padding()
 	std::vector<float> outputImage(25);
 	std::vector<float> outputImageVk(25);
 
-	operator_conv2d_cpu(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
-	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
+	operator_conv2d_cpu(inputImage, kernels, kernelBiases, 1, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
+	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, 1, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
 
 	std::vector<float> expected{ 5, 8, 11, 14, 11, 5, 8, 10, 12, 13, 6, 9, 12, 15, 12, 5, 8, 10, 12, 13, 5, 8, 11, 14, 11 };
 	for (int i = 0; i < outputImage.size(); i++) {
@@ -120,8 +120,8 @@ void test_conv2d_2()
 	std::vector<float> outputImage(18);
 	std::vector<float> outputImageVk(18);
 
-	operator_conv2d_cpu(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
-	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
+	operator_conv2d_cpu(inputImage, kernels, kernelBiases, 1, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
+	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, 1, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
 
 	std::vector<float> expected{ 6,2,6,2,6,2,6,2,6,2,6,2,6,2,6,2,6,2 };
 	for (int i = 0; i < outputImage.size(); i++) {
@@ -160,8 +160,8 @@ void test_conv2d_3()
 	std::vector<float> outputImage(40);
 	std::vector<float> outputImageVk(40);
 
-	operator_conv2d_cpu(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
-	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
+	operator_conv2d_cpu(inputImage, kernels, kernelBiases, 1, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImage[0]);
+	vulkan_operator_conv2d(inputImage, kernels, kernelBiases, 1, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, &outputImageVk[0]);
 
 	std::vector<float> expected;
 	while (expected.size() < 40) {
@@ -204,8 +204,8 @@ void test_maxpool_1()
 	std::vector<float> outputImage(out_w * out_h * c);
 	std::vector<float> outputImageVk(out_w * out_h * c);
 
-	operator_maxpool_cpu(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImage[0]);
-	vulkan_operator_maxpool(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImageVk[0]);
+	operator_maxpool_cpu(inputImage, 1, h, w, c, size, stride, padding, out_h, out_w, &outputImage[0]);
+	vulkan_operator_maxpool(inputImage, 1, h, w, c, size, stride, padding, out_h, out_w, &outputImageVk[0]);
 
 	std::vector<float> expected{ 1,3,5,7,9,1,3,5,7,9, 1,3,5,7,9, 1,3,5,7,9, 1,3,5,7,9 };
 	for (int i = 0; i < outputImage.size(); i++) {
@@ -233,8 +233,8 @@ void test_maxpool_2()
 	std::vector<float> outputImage(out_w * out_h * c);
 	std::vector<float> outputImageVk(out_w * out_h * c);
 
-	operator_maxpool_cpu(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImage[0]);
-	vulkan_operator_maxpool(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImageVk[0]);
+	operator_maxpool_cpu(inputImage, 1, h, w, c, size, stride, padding, out_h, out_w, &outputImage[0]);
+	vulkan_operator_maxpool(inputImage, 1, h, w, c, size, stride, padding, out_h, out_w, &outputImageVk[0]);
 
 	std::vector<float> expected{ 2,3,6,7,2,3,6,7,2,3,6,7,2,3,6,7,2,3,6,7 };
 	for (int i = 0; i < outputImage.size(); i++) {
@@ -263,8 +263,8 @@ void test_maxpool_3()
 	std::vector<float> outputImage(out_w * out_h * c);
 	std::vector<float> outputImageVk(out_w * out_h * c);
 
-	operator_maxpool_cpu(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImage[0]);
-	vulkan_operator_maxpool(inputImage, h, w, c, size, stride, padding, out_h, out_w, &outputImageVk[0]);
+	operator_maxpool_cpu(inputImage, 1, h, w, c, size, stride, padding, out_h, out_w, &outputImage[0]);
+	vulkan_operator_maxpool(inputImage, 1, h, w, c, size, stride, padding, out_h, out_w, &outputImageVk[0]);
 
 	std::vector<float> expected{ 2,3,6,7,8,9, 2,3,6,7,8,9, 2,3,6,7,8,9, 2,3,6,7,8,9, 2,3,6,7,8,9};
 	for (int i = 0; i < outputImage.size(); i++) {

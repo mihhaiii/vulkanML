@@ -49,7 +49,7 @@ static void batch_norm_test1()
 
 void upSampling2D_test1()
 {
-	Tensor* input = Input({ 2,3,2 });
+	Tensor* input = Input({ 1,2,3,2 });
 	Tensor* x = UpSampling2D(2)(input);
 
 	Model* m1 = new Model(input, x, EnumDevice::DEVICE_CPU);
@@ -73,8 +73,8 @@ void upSampling2D_test1()
 
 void concatenateLayer_test1()
 {
-	Tensor* input1 = Input({ 2,3,2 });
-	Tensor* input2 = Input({ 2,3,1 });
+	Tensor* input1 = Input({ 1,2,3,2 });
+	Tensor* input2 = Input({ 1,2,3,1 });
 
 	std::vector<float> data1 = {
 		1, 7, 2, 8, 3, 9,

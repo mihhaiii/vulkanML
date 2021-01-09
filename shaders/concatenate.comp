@@ -2,7 +2,7 @@
 
 layout(local_size_x_id = 0) in; // workgroup dimensions specialization constants
 layout(push_constant) uniform Parameters {  // push constants
-	int h, w, c1, c2;
+	int batch_size, h, w, c1, c2;
 } p;
 
 layout(std430, binding = 0) buffer lay0 { float input1[]; }; 
@@ -15,17 +15,22 @@ void main(){
   if(k >= c){
       return;
   }
-   for (int i = 0; i < p.h; i++) 
+  
+   for (int b = 0; b < p.batch_size; b++)
    {
-		for (int j = 0; j < p.w; j++) 
-		{
-			if (k < p.c1){
-				outputs[i * p.w * c + j * c + k] = input1[i * p.w * p.c1 + j * p.c1 + k];
+		   for (int i = 0; i < p.h; i++) 
+		   {
+				for (int j = 0; j < p.w; j++) 
+				{
+					if (k < p.c1){
+						outputs[b * p.h * p.w * c + i * p.w * c + j * c + k] = input1[b * p.h * p.w * p.c1 + i * p.w * p.c1 + j * p.c1 + k];
+					}
+					else {
+						outputs[b * p.h * p.w * c + i * p.w * c + j * c + k] = input2[b * p.h * p.w * p.c2 + i * p.w * p.c2 + j * p.c2 + k - p.c1];
+					}
+				}
 			}
-			else {
-				outputs[i * p.w * c + j * c + k] = input2[i * p.w * p.c2 + j * p.c2 + k - p.c1];
-			}
-		}
-	}
+   }
+   
 }
 

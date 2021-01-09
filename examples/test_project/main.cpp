@@ -541,8 +541,8 @@ int main()
 	//test_lenet();
 
 	//test_operator_relu();
-	//test_maxpool();
-	//test_conv2d();
+	test_maxpool();
+	test_conv2d();
 
 	//test_mnist_simple();
 

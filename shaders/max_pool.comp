@@ -2,7 +2,7 @@
 
 layout(local_size_x_id = 0) in; // workgroup dimensions specialization constants
 layout(push_constant) uniform Parameters {  // push constants
-	int h, w, c, size, stride, padding, out_h, out_w;
+	int batch_size, h, w, c, size, stride, padding, out_h, out_w;
 } p;
 
 layout(std430, binding = 0) buffer lay0 { float inputImage[]; }; // array parameters
@@ -15,20 +15,25 @@ void main(){
    }
 	int h_offset = -p.padding / 2;
 	int w_offset = -p.padding / 2;
-	for (int i = 0; i < p.out_h; i++) {
-		for (int j = 0; j < p.out_w; j++) {
-			int startI = i * p.stride + h_offset;
-			int startJ = j * p.stride + w_offset;
-			float maxValue = -1e9; // -infinity
-			for (int ii = max(startI,0); ii < min(startI + p.size, p.h); ii++) {
-				for (int jj = max(startJ,0); jj < min(startJ + p.size, p.w); jj++) {
-					float currentValue = inputImage[ii*p.w*p.c + jj*p.c + k]; 
-					if (currentValue > maxValue)
-						maxValue = currentValue;
+	
+	for (int b = 0; b < p.batch_size; b++)
+	{
+		for (int i = 0; i < p.out_h; i++) {
+			for (int j = 0; j < p.out_w; j++) {
+				int startI = i * p.stride + h_offset;
+				int startJ = j * p.stride + w_offset;
+				float maxValue = -1e9; // -infinity
+				for (int ii = max(startI,0); ii < min(startI + p.size, p.h); ii++) {
+					for (int jj = max(startJ,0); jj < min(startJ + p.size, p.w); jj++) {
+						float currentValue = inputImage[b*p.h*p.w*p.c + ii*p.w*p.c + jj*p.c + k]; 
+						if (currentValue > maxValue)
+							maxValue = currentValue;
+					}
 				}
+				outputImage[b*p.out_h*p.out_w*p.c + i*p.out_w*p.c + j*p.c + k] = maxValue;
 			}
-			outputImage[i*p.out_w*p.c + j*p.c + k] = maxValue;
 		}
 	}
+	
 }
 

@@ -335,16 +335,17 @@ public:
 		assert(inputs.size() == 1);
 		inputImage = inputs[0];
 
-		assert(inputImage->getShape().size() == 3);
-		h = inputImage->getShape()[0];
-		w = inputImage->getShape()[1];
-		c = inputImage->getShape()[2];
+		assert(inputImage->getShape().size() == 4);
+		batch_size = inputImage->getShape()[0];
+		h = inputImage->getShape()[1];
+		w = inputImage->getShape()[2];
+		c = inputImage->getShape()[3];
 
 		
 		out_h = (h + padding - size) / stride + 1;
 		out_w = (w + padding - size) / stride + 1;
 
-		outputImage = createOwnedTensor({ out_h, out_w, filters });
+		outputImage = createOwnedTensor({ batch_size, out_h, out_w, filters });
 		weigths = createOwnedTensor({ size, size, c, filters });
 		biases = createOwnedTensor({ filters });
 	}
@@ -406,10 +407,10 @@ public:
 		assert(m_isInputLinked);
 		assert(m_device != DEVICE_UNSPECIFIED);
 		if (m_device == DEVICE_CPU) {
-			operator_conv2d_cpu(inputImage->getData(), weigths->getData(), biases->getData(), h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getData());
+			operator_conv2d_cpu(inputImage->getData(), weigths->getData(), biases->getData(), batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getData());
 		}
 		else if (m_device == DEVICE_VULKAN) {
-			vulkan_operator_conv2d(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
+			vulkan_operator_conv2d(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
 			outputImage->setDevice(DEVICE_CPU);
 			outputImage->setDevice(DEVICE_VULKAN);
 		}
@@ -423,6 +424,7 @@ private:
 	Tensor* weigths;
 	Tensor* biases;
 
+	int batch_size;
 	int h;
 	int w;
 	int c;
@@ -450,15 +452,16 @@ public:
 		assert(inputs.size() == 1);
 		m_inputImage = inputs[0];
 
-		assert(m_inputImage->getShape().size() == 3);
-		h = m_inputImage->getShape()[0];
-		w = m_inputImage->getShape()[1];
-		c = m_inputImage->getShape()[2];
+		assert(m_inputImage->getShape().size() == 4);
+		batch_size = m_inputImage->getShape()[0];
+		h = m_inputImage->getShape()[1];
+		w = m_inputImage->getShape()[2];
+		c = m_inputImage->getShape()[3];
 
 		out_h = (h + padding - size) / stride + 1;
 		out_w = (w + padding - size) / stride + 1;
 
-		m_outputImage = createOwnedTensor({ out_h, out_w, c });
+		m_outputImage = createOwnedTensor({ batch_size, out_h, out_w, c });
 	}
 
 	virtual int getParamCount() override
@@ -469,10 +472,10 @@ public:
 	virtual void forward() {
 		assert(m_device != DEVICE_UNSPECIFIED);
 		if (m_device == DEVICE_CPU) {
-			operator_maxpool_cpu(m_inputImage->getData(), h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getData());
+			operator_maxpool_cpu(m_inputImage->getData(), batch_size, h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getData());
 		}
 		else if (m_device == DEVICE_VULKAN) {
-			vulkan_operator_maxpool(m_inputImage->getDeviceData(), h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getDeviceData());
+			vulkan_operator_maxpool(m_inputImage->getDeviceData(), batch_size, h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getDeviceData());
 		}
 	}
 
@@ -482,6 +485,7 @@ private:
 	Tensor* m_inputImage;
 	Tensor* m_outputImage;
 	// input
+	int batch_size;
 	int h;
 	int w;
 	int c;
@@ -684,13 +688,14 @@ public:
 		assert(inputs.size() == 1);
 		m_input = inputs[0];
 
-		assert(m_input->getShape().size() == 3);
-		h = m_input->getShape()[0];
-		w = m_input->getShape()[1];
-		c = m_input->getShape()[2];
+		assert(m_input->getShape().size() == 4);
+		batch_size = m_input->getShape()[0];
+		h = m_input->getShape()[1];
+		w = m_input->getShape()[2];
+		c = m_input->getShape()[3];
 		out_h = h * size;
 		out_w = w * size;
-		m_output = createOwnedTensor({ out_h, out_w, c });
+		m_output = createOwnedTensor({ batch_size, out_h, out_w, c });
 	}
 
 	virtual int getParamCount() override
@@ -701,22 +706,24 @@ public:
 	virtual void forward() {
 		assert(m_device != DEVICE_UNSPECIFIED);
 		if (m_device == EnumDevice::DEVICE_CPU) {
-			for (int i = 0; i < out_h; i++) {
-				for (int j = 0; j < out_w; j++) {
-					for (int k = 0; k < c; k++) {
-						m_output->at({ i,j,k }) = m_input->at({ i / size, j / size, k });
+			for (int b = 0; b < batch_size; b++) {
+				for (int i = 0; i < out_h; i++) {
+					for (int j = 0; j < out_w; j++) {
+						for (int k = 0; k < c; k++) {
+							m_output->at({ b,i,j,k }) = m_input->at({ b, i / size, j / size, k });
+						}
 					}
 				}
 			}
 		}
 		else if (m_device == EnumDevice::DEVICE_VULKAN) {
-			vulkan_operator_upSampling_2D(m_input->getDeviceData(), m_output->getDeviceData(), h, w, c, size);
+			vulkan_operator_upSampling_2D(m_input->getDeviceData(), m_output->getDeviceData(), batch_size, h, w, c, size);
 		}
 	}
 	Tensor* getOutputTensor() { return m_output; }
 
 private:
-	int size, h, w, c, out_h, out_w;
+	int size, h, w, c, out_h, out_w, batch_size;
 	Tensor* m_input;
 	Tensor* m_output;
 };
@@ -732,18 +739,22 @@ public:
 		m_input1 = inputs[0];
 		m_input2 = inputs[1];
 
-		int h1 = m_input1->getShape()[0];
-		int w1 = m_input1->getShape()[1];
-		c1 = m_input1->getShape()[2];
+		assert(m_input1->getShape().size() == 4); // batch_size, h, w, c
+		assert(m_input2->getShape().size() == 4);
+		batch_size = m_input1->getShape()[0];
+		int h1 = m_input1->getShape()[1];
+		int w1 = m_input1->getShape()[2];
+		c1 = m_input1->getShape()[3];
 
-		int h2 = m_input2->getShape()[0];
-		int w2 = m_input2->getShape()[1];
-		c2 = m_input2->getShape()[2];
+		assert(batch_size == m_input2->getShape()[0]);
+		int h2 = m_input2->getShape()[1];
+		int w2 = m_input2->getShape()[2];
+		c2 = m_input2->getShape()[3];
 
 		assert(h1 == h2);
 		assert(w1 == w2);
 		h = h1; w = w1;
-		m_output = createOwnedTensor({ h, w, c1 + c2 });
+		m_output = createOwnedTensor({ batch_size, h, w, c1 + c2 });
 	}
 
 	virtual int getParamCount() override
@@ -754,22 +765,24 @@ public:
 	virtual void forward() {
 		assert(m_device != DEVICE_UNSPECIFIED);
 		if (m_device == EnumDevice::DEVICE_CPU) {
-			for (int i = 0; i < h; i++) {
-				for (int j = 0; j < w; j++) {
-					for (int k = 0; k < c1 + c2; k++) {
-						m_output->at({ i,j,k }) = k < c1 ? m_input1->at({ i, j, k }) : m_input2->at({i, j, k - c1});
+			for (int b = 0; b < batch_size; b++) {
+				for (int i = 0; i < h; i++) {
+					for (int j = 0; j < w; j++) {
+						for (int k = 0; k < c1 + c2; k++) {
+							m_output->at({ b,i,j,k }) = k < c1 ? m_input1->at({ b, i, j, k }) : m_input2->at({ b, i, j, k - c1 });
+						}
 					}
 				}
 			}
 		}
 		else if (m_device == EnumDevice::DEVICE_VULKAN) {
-			vulkan_operator_concatenate(m_input1->getDeviceData(), m_input2->getDeviceData(), m_output->getDeviceData(), h, w, c1, c2);
+			vulkan_operator_concatenate(m_input1->getDeviceData(), m_input2->getDeviceData(), m_output->getDeviceData(), batch_size, h, w, c1, c2);
 		}
 	}
 	Tensor* getOutputTensor() { return m_output; }
 
 private:
-	int h, w, c1, c2;
+	int h, w, c1, c2, batch_size;
 	Tensor* m_input1, *m_input2;
 	Tensor* m_output;
 };
