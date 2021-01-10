@@ -1,6 +1,5 @@
 #include <iostream>
 #include <cassert>
-#include "InferenceFramework.h"
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -11,6 +10,8 @@
 #include <fstream>
 #include "TensorUtils.h"
 #include <opencv2/opencv.hpp>
+#include "Model.h"
+#include "InstanceManager.h"
 
 using namespace std;
 

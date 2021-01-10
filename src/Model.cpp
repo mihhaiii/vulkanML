@@ -1,0 +1,229 @@
+#include "Model.h"
+
+Model::Model(Tensor* input, Tensor* output, EnumDevice device)
+	: m_device(device),
+	m_inputs({ input }), m_output(output)
+{
+	topologicalSort();
+	setDevice();
+
+	showInfo();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Model::Model(const std::vector<Tensor*>& inputs, Tensor* output, EnumDevice device)
+	: m_device(device),
+	m_inputs(inputs), m_output(output)
+{
+	topologicalSort();
+	setDevice();
+
+	showInfo();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Tensor* Model::run(const std::vector<std::vector<float>>& inputs)
+{
+	setDevice();
+	assert(inputs.size() == m_inputs.size());
+	for (int i = 0; i < inputs.size(); i++) {
+		m_inputs[i]->setData(inputs[i]);
+	}
+	for (Layer* l : sortedLayers) {
+		l->forward();
+	}
+	return m_output;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Tensor* Model::run(const std::vector<float>& input)
+{
+	setDevice();
+	assert(m_inputs.size() == 1);
+	m_inputs[0]->setData(input);
+	int i = 0;
+	for (Layer* l : sortedLayers) {
+		l->forward();
+		assert(!std::isnan(l->getOutputTensor()->getData()[0]));
+		i++;
+	}
+	return m_output;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Tensor* Model::run(float* input, const int size)
+{
+	return run(std::vector<float>(input, input + size));
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Tensor* Model::run()
+{
+	setDevice();
+	for (Layer* l : sortedLayers) {
+		l->forward();
+	}
+	return m_output;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Model::readWeights(const char* filename, int ignoreFirst)
+{
+	FILE* file = fopen(filename, "rb");
+
+	if (ignoreFirst) {
+		float* tmp = new float[ignoreFirst];
+		readBinFile(file, tmp, ignoreFirst);
+		delete[] tmp;
+	}
+
+	for (Layer* l : sortedLayers)
+	{
+		l->readWeigthsFromFile(file);
+	}
+
+	fclose(file);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Model::readDarknetWeights(const char* filename, int ignoreFirst)
+{
+	FILE* file = fopen(filename, "rb");
+
+	if (ignoreFirst) {
+		float* tmp = new float[ignoreFirst];
+		readBinFile(file, tmp, ignoreFirst);
+		delete[] tmp;
+	}
+
+	for (Layer* l : sortedLayers)
+	{
+		Conv2dLayer* conv = dynamic_cast<Conv2dLayer*>(l);
+		if (conv == nullptr)
+			continue;
+
+		if (conv->getUseBias()) {
+			conv->readBiases(file);
+		}
+		else {
+			Layer* nxt = conv->getOutgoingLayers().front();
+			BatchNormalizationLayer* bn = dynamic_cast<BatchNormalizationLayer*>(nxt);
+			assert(bn);
+			bn->readParams(file);
+		}
+		conv->readWeightsAndTranspose(file);
+	}
+
+	// check that we've reached the end of the file
+	float tmp;
+	int read = fread(&tmp, sizeof(float), 1, file);
+	assert(read == 0);
+
+	fclose(file);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int Model::getParamCount()
+{
+	int res = 0;
+	for (Layer* l : sortedLayers) {
+		res += l->getParamCount();
+	}
+	return res;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Model::showInfo()
+{
+	for (Layer* l : sortedLayers)
+	{
+		l->showInfo();
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Model::fit(Tensor* x, Tensor* y)
+{
+	int samples = x->getShape().front();
+	assert(samples == y->getShape().front());
+	int numInputsPerSample = x->getSize() / samples;
+	const int batch_size = 32;
+
+	const int iterations = (samples + batch_size - 1) / batch_size;
+
+	randomWeightInit();
+
+	for (int iter = 0; iter < iterations; iter++)
+	{
+		int firstSampleFromBatch = iter * batch_size;
+		int lastSampleFromBatch = (std::min)(firstSampleFromBatch + batch_size, samples);
+
+		Tensor* out = run(&x->getData()[firstSampleFromBatch * numInputsPerSample], batch_size * numInputsPerSample);
+
+		for (int l = sortedLayers.size() - 1; l >= 0; l--)
+		{
+			sortedLayers[l]->backprop();
+		}
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Model::randomWeightInit()
+{
+	for (Layer* l : sortedLayers) {
+		l->randomWeightInit(0.01);
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Model::topologicalSort()
+{
+	sortedLayers.clear();
+	std::set<Layer*> visited;
+
+	for (Tensor* t : m_inputs) {
+		dfs(t->getParentLayer(), visited);
+	}
+
+	reverse(sortedLayers.begin(), sortedLayers.end());
+
+	assert(visited.find(m_output->getParentLayer()) != visited.end());
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Model::setDevice()
+{
+	for (Layer* l : sortedLayers) {
+		l->setDevice(m_device);
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Model::dfs(Layer* l, std::set<Layer*>& visited)
+{
+	if (visited.find(l) != visited.end())
+		return;
+
+	visited.insert(l);
+
+	for (Layer* n : l->getOutgoingLayers()) {
+		dfs(n, visited);
+	}
+	sortedLayers.push_back(l);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,6 @@
-#include "InferenceFramework.h"
 #include "TensorUtils.h"
 #include "MemoryManager.h"
+#include "Tensor.h"
 
 std::vector<Tensor*> split(Tensor* t, const std::vector<int>& dims, int axis)
 {

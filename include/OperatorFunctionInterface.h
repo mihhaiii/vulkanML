@@ -1,6 +1,6 @@
 #pragma once
 #include "MemoryManager.h"
-#include "InferenceFramework.h"
+#include "Layers.h"
 
 
 Conv2dLayer& Conv2D(int filters, int size, int stride = 1, const std::string& padding = "valid", bool useBias = true)

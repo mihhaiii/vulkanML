@@ -22,13 +22,14 @@
 #include "operator_maxpool_cpu.h"
 #include "vulkan_operator_conv2d.h"
 #include "vulkan_operator_maxpool.h"
-#include "InferenceFramework.h"
 #include <fstream>
 #include "InstanceManager.h"
 #include "OperatorFunctionInterface.h"
 #include <filesystem>
 #include <comdef.h>  
 #include <stdlib.h>
+#include "Model.h"
+#include "SequentialModel.h"
 
 void test_vulkan_operator_FC()
 {
@@ -498,7 +499,7 @@ void test_simle_mnist_model_with_batches()
 	for (int digit = 0; digit < 10; digit++)
 	{
 		const std::string path = "trainingSample/" + std::to_string(digit);
-		for (auto& p : fs::recursive_directory_iterator(path.c_str()))
+		for (auto& p : std::filesystem::recursive_directory_iterator(path.c_str()))
 		{
 			std::cout << p.path() << '\n';
 			float& dest = train_images->at({ idx,0,0,0 });

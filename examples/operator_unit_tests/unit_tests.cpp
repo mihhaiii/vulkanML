@@ -1,8 +1,9 @@
 #include "unit_tests.h"
 #include <iostream>
-#include "InferenceFramework.h"
 #include "OperatorFunctionInterface.h"
 #include "TensorUtils.h"
+#include "SequentialModel.h"
+#include "Model.h"
 
 static float sqr(float a) {
 	return a * a;
