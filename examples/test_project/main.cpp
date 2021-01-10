@@ -489,10 +489,8 @@ void test_simle_mnist_model_with_batches()
 {
 
 	namespace fs = std::filesystem;
-	Tensor* input = Input({ 32,28,28,1 });
-	Tensor* train_images = Input({ 600,28,28,1 });
-	train_images->setDevice(DEVICE_CPU);
-	//Tensor* train_images = new Tensor({ 600,28,28,1 }, DEVICE_CPU);
+	Tensor* input = Input({ 28,28,1 });
+	Tensor* train_images = new Tensor({ 600,28,28,1 }, DEVICE_CPU);
 	Tensor* train_labels = new Tensor({ 600 }, DEVICE_CPU);
 	int idx = 0;
 	int h, w, c;
@@ -514,13 +512,13 @@ void test_simle_mnist_model_with_batches()
 	y = ReLU()(y);
 	y = Dense(10)(y);
 
-	Model* m = new Model(input, y, EnumDevice::DEVICE_VULKAN);
+	Model* m = new Model(input, y, EnumDevice::DEVICE_CPU);
 
 	m->readWeights("conv_mnist/simple_conv_mnist_batches");
 
 	//m->fit(train_images, train_labels);
 
-	m->run();
+	m->run(train_images);
 	float* output = y->getData();
 	for (int i = 0; i < y->getSize(); i++) {
 		if (i % 10 == 0) std::cout << "\n";

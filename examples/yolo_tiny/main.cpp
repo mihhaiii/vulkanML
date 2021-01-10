@@ -268,7 +268,7 @@ int main()
 	img.insert(img.end(), img1.begin(), img1.end());
 	
 	Tensor* x, *x_8, *output_0, *output_1, *boxes_0, *boxes_1, *x_tmp, *x_tmp1, *input;
-	input = x_tmp = Input({ 2,imageSize,imageSize,3 });
+	input = x_tmp = Input({ imageSize,imageSize,3 });
 
 	// Darknet tiny
 	x_tmp1 = x = Conv2D(16, 3, 1, "same", false)(input);
@@ -335,12 +335,6 @@ int main()
 	output_1 = BatchNorm()(output_1);
 	output_1 = LeakyReLU()(output_1);
 	output_1 = Conv2D(anchors * (classes + 5), 1, 1, "same", true)(output_1);
-
-	// yolo boxes
-	//boxes_0 = Lambda([&](Tensor* t) {})(output_0); // TODO
-	//boxes_1 = Lambda([&](Tensor* t) {})(output_1); // TODO
-
-	// outputs = Lambda(yolo_nms)({boxes_0, boxes_1}); // TODO
 
 	Model* m = new Model(input, output_1, DEVICE_VULKAN);
 	m->readDarknetWeights("data/yolov3-tiny.weights", 5); // major, minor, revision, seen, _

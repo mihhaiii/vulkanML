@@ -24,7 +24,7 @@ void Conv2dLayer::init(const std::vector<Tensor*>& inputs)
 	inputImage = inputs[0];
 
 	assert(inputImage->getShape().size() == 4);
-	batch_size = inputImage->getShape()[0];
+	m_batch_size = inputImage->getShape()[0];
 	h = inputImage->getShape()[1];
 	w = inputImage->getShape()[2];
 	c = inputImage->getShape()[3];
@@ -33,7 +33,7 @@ void Conv2dLayer::init(const std::vector<Tensor*>& inputs)
 	out_h = (h + padding - size) / stride + 1;
 	out_w = (w + padding - size) / stride + 1;
 
-	outputImage = createOwnedTensor({ batch_size, out_h, out_w, filters });
+	outputImage = createOwnedTensor({ m_batch_size, out_h, out_w, filters });
 	weigths = createOwnedTensor({ size, size, c, filters });
 	biases = createOwnedTensor({ filters });
 }
@@ -93,10 +93,10 @@ void Conv2dLayer::readBiases(FILE* file) {
 	assert(m_isInputLinked);
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == DEVICE_CPU) {
-		operator_conv2d_cpu(inputImage->getData(), weigths->getData(), biases->getData(), batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getData());
+		operator_conv2d_cpu(inputImage->getData(), weigths->getData(), biases->getData(), m_batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getData());
 	}
 	else if (m_device == DEVICE_VULKAN) {
-		vulkan_operator_conv2d(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
+		vulkan_operator_conv2d(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), m_batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
 		outputImage->setDevice(DEVICE_CPU);
 		outputImage->setDevice(DEVICE_VULKAN);
 	}
@@ -119,7 +119,7 @@ void MaxPooling2dLayer::init(const std::vector<Tensor*>& inputs)
 	m_inputImage = inputs[0];
 
 	assert(m_inputImage->getShape().size() == 4);
-	batch_size = m_inputImage->getShape()[0];
+	m_batch_size = m_inputImage->getShape()[0];
 	h = m_inputImage->getShape()[1];
 	w = m_inputImage->getShape()[2];
 	c = m_inputImage->getShape()[3];
@@ -127,7 +127,7 @@ void MaxPooling2dLayer::init(const std::vector<Tensor*>& inputs)
 	out_h = (h + padding - size) / stride + 1;
 	out_w = (w + padding - size) / stride + 1;
 
-	m_outputImage = createOwnedTensor({ batch_size, out_h, out_w, c });
+	m_outputImage = createOwnedTensor({ m_batch_size, out_h, out_w, c });
 }
 
 int MaxPooling2dLayer::getParamCount() 
@@ -138,10 +138,10 @@ int MaxPooling2dLayer::getParamCount()
 void MaxPooling2dLayer::forward() {
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == DEVICE_CPU) {
-		operator_maxpool_cpu(m_inputImage->getData(), batch_size, h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getData());
+		operator_maxpool_cpu(m_inputImage->getData(), m_batch_size, h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getData());
 	}
 	else if (m_device == DEVICE_VULKAN) {
-		vulkan_operator_maxpool(m_inputImage->getDeviceData(), batch_size, h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getDeviceData());
+		vulkan_operator_maxpool(m_inputImage->getDeviceData(), m_batch_size, h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getDeviceData());
 	}
 }
 
@@ -155,7 +155,9 @@ void FCLayer::init(const std::vector<Tensor*>& inputs)
 	assert(inputs.size() == 1);
 	m_input = inputs[0];
 	m_batch_size = m_input->getShape().front(); // first dim is the batch size
-	m_numNeuronsLastLayer = m_input->getSize() / m_batch_size;
+	m_numNeuronsLastLayer = m_input->getSampleSize();
+
+	// if batch size not known yet (==1), cannot allocate the output tensor yet but can allocate the weights and the biases
 	m_weights = createOwnedTensor({ m_numNeuronsLastLayer, m_numNeurons });
 	m_biases = createOwnedTensor({ m_numNeurons });
 	m_output = createOwnedTensor({ m_batch_size, m_numNeurons });
@@ -255,19 +257,19 @@ void UpSampling2DLayer::init(const std::vector<Tensor*>& inputs)
 	m_input = inputs[0];
 
 	assert(m_input->getShape().size() == 4);
-	batch_size = m_input->getShape()[0];
+	m_batch_size = m_input->getShape()[0];
 	h = m_input->getShape()[1];
 	w = m_input->getShape()[2];
 	c = m_input->getShape()[3];
 	out_h = h * size;
 	out_w = w * size;
-	m_output = createOwnedTensor({ batch_size, out_h, out_w, c });
+	m_output = createOwnedTensor({ m_batch_size, out_h, out_w, c });
 }
 
 void UpSampling2DLayer::forward() {
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == EnumDevice::DEVICE_CPU) {
-		for (int b = 0; b < batch_size; b++) {
+		for (int b = 0; b < m_batch_size; b++) {
 			for (int i = 0; i < out_h; i++) {
 				for (int j = 0; j < out_w; j++) {
 					for (int k = 0; k < c; k++) {
@@ -278,7 +280,7 @@ void UpSampling2DLayer::forward() {
 		}
 	}
 	else if (m_device == EnumDevice::DEVICE_VULKAN) {
-		vulkan_operator_upSampling_2D(m_input->getDeviceData(), m_output->getDeviceData(), batch_size, h, w, c, size);
+		vulkan_operator_upSampling_2D(m_input->getDeviceData(), m_output->getDeviceData(), m_batch_size, h, w, c, size);
 	}
 }
 
@@ -292,12 +294,12 @@ void ConcatenateLayer::init(const std::vector<Tensor*>& inputs)
 
 	assert(m_input1->getShape().size() == 4); // batch_size, h, w, c
 	assert(m_input2->getShape().size() == 4);
-	batch_size = m_input1->getShape()[0];
+	m_batch_size = m_input1->getShape()[0];
 	int h1 = m_input1->getShape()[1];
 	int w1 = m_input1->getShape()[2];
 	c1 = m_input1->getShape()[3];
 
-	assert(batch_size == m_input2->getShape()[0]);
+	assert(m_batch_size == m_input2->getShape()[0]);
 	int h2 = m_input2->getShape()[1];
 	int w2 = m_input2->getShape()[2];
 	c2 = m_input2->getShape()[3];
@@ -305,13 +307,13 @@ void ConcatenateLayer::init(const std::vector<Tensor*>& inputs)
 	assert(h1 == h2);
 	assert(w1 == w2);
 	h = h1; w = w1;
-	m_output = createOwnedTensor({ batch_size, h, w, c1 + c2 });
+	m_output = createOwnedTensor({ m_batch_size, h, w, c1 + c2 });
 }
 
 void ConcatenateLayer::forward() {
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == EnumDevice::DEVICE_CPU) {
-		for (int b = 0; b < batch_size; b++) {
+		for (int b = 0; b < m_batch_size; b++) {
 			for (int i = 0; i < h; i++) {
 				for (int j = 0; j < w; j++) {
 					for (int k = 0; k < c1 + c2; k++) {
@@ -322,7 +324,7 @@ void ConcatenateLayer::forward() {
 		}
 	}
 	else if (m_device == EnumDevice::DEVICE_VULKAN) {
-		vulkan_operator_concatenate(m_input1->getDeviceData(), m_input2->getDeviceData(), m_output->getDeviceData(), batch_size, h, w, c1, c2);
+		vulkan_operator_concatenate(m_input1->getDeviceData(), m_input2->getDeviceData(), m_output->getDeviceData(), m_batch_size, h, w, c1, c2);
 	}
 }
 

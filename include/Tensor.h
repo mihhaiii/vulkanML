@@ -44,12 +44,13 @@ public:
 
 	void readData(FILE* file);
 
-	void setData(const std::vector<float>& data);
+	void setData(const float* data, int size);
 
 	float* getData();
 	vuh::Array<float>* getDeviceData() { return m_deviceData; }
 	float* getDataFromDeviceData();
 	int getSize() { return m_size; }
+	int getSampleSize();
 	Shape getShape() { return m_shape; }
 
 	float& at(const Shape& loc);
@@ -60,9 +61,14 @@ public:
 
 	Layer* getParentLayer() { return m_parentLayer; }
 
+	void setBatchSize(int batch_size);
 
 	friend class Layer;
 private:
+	void setUnknownDimBasedOnTotalSize(int totalSize);
+
+	bool m_hasUnknownDim;
+	int m_unknownDimIdx;
 	int m_size;
 	Shape m_shape;
 	std::vector<int> m_shapeSuffixProduct;

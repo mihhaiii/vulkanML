@@ -21,6 +21,10 @@ public:
 		}
 	}
 
+	virtual void setBatchSize(int batch_size) {
+		m_batch_size = batch_size;
+	}
+
 	static void addConnection(Layer* from, Layer* to)
 	{
 		from->m_outgoingLayers.push_back(to);
@@ -82,6 +86,7 @@ protected:
 
 	EnumDevice m_device;
 	bool m_isInputLinked;
+	int m_batch_size;
 };
 
 class Conv2dLayer : public Layer
@@ -107,7 +112,6 @@ private:
 	Tensor* weigths;
 	Tensor* biases;
 
-	int batch_size;
 	int h;
 	int w;
 	int c;
@@ -134,7 +138,6 @@ private:
 	Tensor* m_inputImage;
 	Tensor* m_outputImage;
 	// input
-	int batch_size;
 	int h;
 	int w;
 	int c;
@@ -166,7 +169,6 @@ public:
 private:
 
 	int m_numNeurons;
-	int m_batch_size;
 	int m_numNeuronsLastLayer;
 	Tensor* m_input;
 	Tensor* m_weights;
@@ -179,10 +181,10 @@ class InputLayer : public Layer
 {
 public:
 	InputLayer(const Shape& shape, const char* binFile = nullptr)
-		: m_shape(shape)
 	{
-		// first dim is the batch_size
-		m_data = createOwnedTensor(shape);
+		m_shape = shape;
+		m_shape.insert(m_shape.begin(), -1); // first dim is the batch_size, unknown as for now
+		m_data = createOwnedTensor(m_shape);
 		if (binFile)
 			m_data->readData(binFile);
 	}
@@ -196,7 +198,7 @@ public:
 	}
 
 	void fill(const std::vector<float>& src) {
-		m_data->setData(src);
+		m_data->setData(&src[0], src.size());
 	}
 
 	virtual void forward() {}
@@ -260,7 +262,7 @@ public:
 	Tensor* getOutputTensor() { return m_output; }
 
 private:
-	int size, h, w, c, out_h, out_w, batch_size;
+	int size, h, w, c, out_h, out_w;
 	Tensor* m_input;
 	Tensor* m_output;
 };
@@ -280,7 +282,7 @@ public:
 	Tensor* getOutputTensor() { return m_output; }
 
 private:
-	int h, w, c1, c2, batch_size;
+	int h, w, c1, c2;
 	Tensor* m_input1, * m_input2;
 	Tensor* m_output;
 };

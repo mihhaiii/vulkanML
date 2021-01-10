@@ -9,10 +9,11 @@ public:
 	Model(Tensor* input, Tensor* output, EnumDevice device = DEVICE_CPU);
 	Model(const std::vector<Tensor*>& inputs, Tensor* output, EnumDevice device = DEVICE_CPU);
 
-	Tensor* run(const std::vector<std::vector<float>>& inputs);
+	Tensor* run(const float* inputData, const int size);
 	Tensor* run(const std::vector<float>& input);
-	Tensor* run(float* input, const int size);
+	Tensor* run(Tensor* inputTensor);
 	Tensor* run();
+	Tensor* run(const std::vector<std::vector<float>>& inputs);
 
 	std::vector<Layer*>& layers() { return sortedLayers; }
 
@@ -29,11 +30,13 @@ private:
 	void randomWeightInit();
 	void topologicalSort();
 	void dfs(Layer* l, std::set<Layer*>& visited);
+	void setBatchSize();
 
 private:
 	std::vector<Tensor*> m_inputs;
 	Tensor* m_output;
 	std::vector<Layer*> sortedLayers;
 
+	int batch_size;
 	EnumDevice m_device;
 };

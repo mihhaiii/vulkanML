@@ -46,16 +46,29 @@ void readBinFile(FILE* file, float* out, int count)
 Tensor::Tensor(const Shape& shape, EnumDevice device, const char* binFile)
 	: m_shape(shape),
 	m_device(device),
-	m_size(getShapeSize(shape)),
 	m_data(nullptr),
 	m_deviceData(nullptr)
 {
-
+	Shape::iterator findIt = std::find(m_shape.begin(), m_shape.end(), -1);
+	m_hasUnknownDim = findIt != m_shape.end();
+	if (m_hasUnknownDim) {
+		m_unknownDimIdx = findIt - m_shape.begin();
+		m_size = -1;
+	}
+	else {
+		m_unknownDimIdx = -1;
+		m_size = getShapeSize(shape);
+	}
+	
 	setDevice(device);
 
-	if (binFile) {
-		readData(binFile);
+	if (!m_hasUnknownDim)
+	{
+		if (binFile) {
+			readData(binFile);
+		}
 	}
+
 	createShapeSuffixProduct();
 }
 
@@ -65,8 +78,15 @@ Tensor::~Tensor() {
 	m_deviceData = nullptr;
 }
 
+int Tensor::getSampleSize()
+{
+	// assuming first dim is the batch_size, return the product of all the other dims
+	return m_shapeSuffixProduct[1];
+}
+
 void Tensor::reshape(Shape newShape)
 {
+	assert(!m_hasUnknownDim);
 	bool hasMinusOne = false;
 	int minusOneIdx = 0;
 	int prod = 1;
@@ -98,6 +118,7 @@ void Tensor::reshape(Shape newShape)
 
 void Tensor::randomWeightInit(const float factor)
 {
+	assert(!m_hasUnknownDim);
 	if (m_data == nullptr) {
 		m_data = new float[m_size];
 	}
@@ -136,6 +157,10 @@ void Tensor::setDevice(EnumDevice device) {
 
 	EnumDevice prevDevice = m_device;
 	m_device = device;
+	
+	if (m_hasUnknownDim) {
+		return; // if we don't know entirely the shape of the tensor delay the allocations until we do
+	}
 	if (m_device & DEVICE_CPU)
 	{
 		if (m_data == nullptr) {
@@ -160,6 +185,7 @@ void Tensor::setDevice(EnumDevice device) {
 
 bool Tensor::inc(Shape& it)
 {
+	assert(!m_hasUnknownDim);
 	for (int i = it.size() - 1; i >= 0; i--) {
 		if (it[i] + 1 < m_shape[i]) {
 			it[i]++;
@@ -172,6 +198,7 @@ bool Tensor::inc(Shape& it)
 
 void Tensor::readData(const char* binFile) {
 	assert(m_device != DEVICE_UNSPECIFIED);
+	assert(!m_hasUnknownDim);
 	if (!m_data)
 		m_data = new float[m_size];
 	readBinFile(binFile, m_data, m_size);
@@ -182,6 +209,7 @@ void Tensor::readData(const char* binFile) {
 
 void Tensor::readData(FILE* file) {
 	assert(m_device != DEVICE_UNSPECIFIED);
+	assert(!m_hasUnknownDim);
 	if (!m_data)
 		m_data = new float[m_size];
 	readBinFile(file, m_data, m_size);
@@ -190,17 +218,37 @@ void Tensor::readData(FILE* file) {
 	}
 }
 
-void Tensor::setData(const std::vector<float>& data)
+void Tensor::setBatchSize(int batch_size)
+{
+	int currentBatchSize = m_shape.front();
+	if (batch_size == currentBatchSize)
+		return;
+
+	m_shape[0] = batch_size;
+	m_hasUnknownDim = false;
+	m_size = getShapeSize(m_shape);
+	delete[] m_data;
+	delete m_deviceData;
+	setDevice(m_device); // allocate memory now
+	createShapeSuffixProduct(); // update the suffix product vector as the shape is entirely known now
+}
+
+void Tensor::setData(const float* data, int size)
 {
 	assert(m_device != DEVICE_UNSPECIFIED);
-	assert(data.size() == m_size);
+	if (!m_hasUnknownDim) {
+		assert(size == m_size);
+	}
+	else {
+		setUnknownDimBasedOnTotalSize(size);
+	}
 	if (m_device & DEVICE_CPU) {
 		for (int i = 0; i < m_size; i++) {
 			m_data[i] = data[i];
 		}
 	}
 	if (m_device & DEVICE_VULKAN) {
-		m_deviceData->fromHost(&data[0], &data[0] + m_size);
+		m_deviceData->fromHost(data, data + m_size);
 	}
 }
 
@@ -218,4 +266,19 @@ float* Tensor::getDataFromDeviceData() {
 		m_data = new float[m_size];
 	m_deviceData->toHost(m_data);
 	return m_data;
+}
+
+void Tensor::setUnknownDimBasedOnTotalSize(int totalSize)
+{
+	m_size = totalSize;
+	int currentSize = 1;
+	for (auto x : m_shape) {
+		if (x != -1)
+			currentSize *= x;
+	}
+	assert(totalSize % currentSize == 0);
+	m_shape[m_unknownDimIdx] = totalSize / currentSize;
+	m_hasUnknownDim = false;
+	setDevice(m_device); // allocate memory now
+	createShapeSuffixProduct(); // update the suffix product vector as the shape is entirely known now
 }

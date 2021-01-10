@@ -129,7 +129,7 @@ void test_tensor_split_1()
 		1,2,2,3,  1,2,2,3,  1,2,2,3,
 		1,2,2,3,  1,2,2,3,  1,2,2,3
 	};
-	t->setData(data);
+	t->setData(&data[0], data.size());
 	auto ts = split(t, { 1,2,1 }, -1);
 	auto t1 = ts[0];
 	auto t2 = ts[1];
