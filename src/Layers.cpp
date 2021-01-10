@@ -10,6 +10,8 @@
 #include "vulkan_operator_batch_normalization.h"
 #include "vulkan_operator_upSampling_2D.h"
 #include "vulkan_operator_concatenate.h"
+#include "operator_softmax_cpu.h"
+#include "vulkan_operator_softmax.h"
 
 Conv2dLayer::Conv2dLayer(int _filters, int _size, int _stride, const std::string& _padding, bool _useBias)
 	: filters(_filters), size(_size), stride(_stride), useBias(_useBias)
@@ -405,6 +407,67 @@ void BatchNormalizationLayer::setParams(const std::vector<float>& inParams)
 	}
 	else if (m_device == EnumDevice::DEVICE_VULKAN) {
 		m_params->getDeviceData()->fromHost(&inParams[0], &inParams[0] + inParams.size());
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void SoftmaxLayer::init(const std::vector<Tensor*>& inputs)
+{
+	assert(inputs.size() == 1);
+	m_input = inputs[0];
+
+	m_output = createOwnedTensor(m_input->getShape());
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void SoftmaxLayer::forward()
+{
+	assert(m_device != DEVICE_UNSPECIFIED);
+	if (m_device == EnumDevice::DEVICE_CPU) {
+		operator_softmax_cpu(m_input->getData(), m_output->getData(), m_batch_size, m_input->getSampleSize());
+	}
+	else if (m_device == EnumDevice::DEVICE_VULKAN) {
+		vulkan_operator_softmax(m_input->getDeviceData(), m_output->getDeviceData(), m_batch_size, m_input->getSampleSize());
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void ArgmaxLayer::init(const std::vector<Tensor*>& inputs)
+{
+	assert(inputs.size() == 1);
+	m_input = inputs[0];
+	m_batch_size = m_input->getShape().front();
+	m_output = createOwnedTensor({ m_batch_size });
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void ArgmaxLayer::forward()
+{
+	assert(m_device != DEVICE_UNSPECIFIED);
+	if (m_device == EnumDevice::DEVICE_CPU) {
+		int sample_size = m_input->getSampleSize();
+		float* inputData = m_input->getData();
+		float* outputData = m_output->getData();
+		for (int b = 0; b < m_batch_size; b++) {
+			float mx = -FLT_MAX;
+			int mxIdx = -1;
+			int startIdx = b * sample_size;
+			int endIdx = startIdx + sample_size;
+			for (int i = startIdx; i < endIdx; i++) {
+				if (inputData[i] > mx) {
+					mx = inputData[i];
+					mxIdx = i - startIdx;
+				}
+			}
+			outputData[b] = mxIdx;
+		}
+	}
+	else if (m_device == EnumDevice::DEVICE_VULKAN) {
+		vulkan_operator_argmax(m_input->getDeviceData(), m_output->getDeviceData(), m_batch_size, m_input->getSampleSize());
 	}
 }
 

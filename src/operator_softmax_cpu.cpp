@@ -2,18 +2,38 @@
 #include <algorithm>
 #include <numeric>
 
-void operator_softmax_cpu(float * inputs, float * outputs, int numInputs) 
+void operator_softmax_cpu(float * inputs, float * outputs, int batch_size, int sample_size)
 {
-	for (int i = 0; i < numInputs; i++) {
+	// inputs and outputs are both (batch_size x sample_size)
+	int size = batch_size * sample_size;
+	for (int i = 0; i < size; i++) {
 		outputs[i] = inputs[i];
 	}
 
-	float * last = outputs + numInputs;
-	float maxElem = *std::max_element(outputs, last);
-	if (maxElem > 0)
-		std::for_each(outputs, last, [&](float& v) { v -= maxElem; });
-	std::for_each(outputs, last, [&](float& v) { v = exp(v); });
-	float sum = 0;
-	sum = std::accumulate(outputs, last, sum);
-	std::for_each(outputs, last, [&](float& v) { v /= sum; });
+	for (int b = 0; b < batch_size; b++)
+	{
+		int firstIdx = b * sample_size;
+		int endIdx = firstIdx + sample_size;
+
+		float maxElem = -FLT_MAX;
+		for (int i = firstIdx; i < endIdx; i++) {
+			maxElem = (std::max)(maxElem, outputs[i]);
+		}
+
+		if (maxElem > 0) {
+			for (int i = firstIdx; i < endIdx; i++) {
+				outputs[i] -= maxElem;
+			}
+		}
+		float sum = 0;
+		for (int i = firstIdx; i < endIdx; i++) {
+			outputs[i] = exp(outputs[i]);
+			sum += outputs[i];
+		}
+
+		for (int i = firstIdx; i < endIdx; i++) {
+			outputs[i] /= sum;
+		}
+	}
+
 }

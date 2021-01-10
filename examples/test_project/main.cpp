@@ -162,7 +162,7 @@ void test_vulkan_softmax()
 	std::vector<float> outputVk(numInputs);
 	std::vector<float> outputCpu(numInputs);
 	vulkan_operator_softmax(&input[0], &outputVk[0], numInputs);
-	operator_softmax_cpu(&input[0], &outputCpu[0], numInputs);
+	operator_softmax_cpu(&input[0], &outputCpu[0], 1, numInputs);
 
 	for (int i = 0; i < numInputs; i++) {
 		if (abs(outputVk[i] - outputCpu[i]) >= 0.1) {
@@ -215,7 +215,7 @@ void test_lenet()
 
 	// run model
 	vulkan_operator_FC(&input[0], &weights[0], &biases[0], &outputFC[0], numInputs, numOutputs);
-	operator_softmax_cpu(&outputFC[0], &outputSoftmax[0], numOutputs);
+	operator_softmax_cpu(&outputFC[0], &outputSoftmax[0], 1, numOutputs);
 	vulkan_operator_softmax(&outputFC[0], &outputSoftmaxVk[0], numOutputs);
 	auto itMax = std::max_element(outputSoftmax.begin(), outputSoftmax.end());
 	int digit = itMax - outputSoftmax.begin();
@@ -430,7 +430,7 @@ void test_conv_net1()
 	float time = (float)(clock() - start) / CLOCKS_PER_SEC;
 
 	float* output = m.getOutputData();
-	operator_softmax_cpu(output, output, 10);
+	operator_softmax_cpu(output, output, 1, 10);
 	auto itMax = std::max_element(output, output + 10);
 	int digit = itMax - output;
 	float prob = *itMax;
@@ -475,7 +475,7 @@ void test_conv_net_Functional_API()
 	x = m->run(img);
 
 	float* output = x->getData();
-	operator_softmax_cpu(output, output, 10);
+	operator_softmax_cpu(output, output, 1, 10);
 	auto itMax = std::max_element(output, output + 10);
 	int digit = itMax - output;
 	float prob = *itMax;
@@ -511,8 +511,10 @@ void test_simle_mnist_model_with_batches()
 	y = Dense(64)(input);
 	y = ReLU()(y);
 	y = Dense(10)(y);
+	y = Softmax()(y);
+	y = Argmax()(y);
 
-	Model* m = new Model(input, y, EnumDevice::DEVICE_CPU);
+	Model* m = new Model(input, y, EnumDevice::DEVICE_VULKAN);
 
 	m->readWeights("conv_mnist/simple_conv_mnist_batches");
 

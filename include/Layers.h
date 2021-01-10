@@ -247,6 +247,45 @@ private:
 };
 
 
+class SoftmaxLayer : public Layer
+{
+public:
+	SoftmaxLayer() : m_input(nullptr), m_output(nullptr) {}
+
+	virtual void init(const std::vector<Tensor*>& inputs) override;
+
+	virtual int getParamCount() override {
+		return 0;
+	}
+
+	virtual void forward();
+	Tensor* getOutputTensor() { return m_output; }
+
+private:
+	Tensor* m_input;
+	Tensor* m_output;
+};
+
+class ArgmaxLayer : public Layer
+{
+public:
+	ArgmaxLayer() : m_input(nullptr), m_output(nullptr) {}
+
+	virtual void init(const std::vector<Tensor*>& inputs) override;
+
+	virtual int getParamCount() override {
+		return 0;
+	}
+
+	virtual void forward();
+	Tensor* getOutputTensor() { return m_output; }
+
+private:
+	Tensor* m_input;
+	Tensor* m_output;
+};
+
+
 class UpSampling2DLayer : public Layer
 {
 public:

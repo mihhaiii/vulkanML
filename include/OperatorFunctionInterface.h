@@ -65,3 +65,17 @@ ConcatenateLayer& Concatenate()
 	MemoryManager::getInstance().add(l);
 	return *l;
 }
+
+SoftmaxLayer& Softmax()
+{
+	SoftmaxLayer* l = new SoftmaxLayer();
+	MemoryManager::getInstance().add(l);
+	return *l;
+}
+
+ArgmaxLayer& Argmax()
+{
+	ArgmaxLayer* l = new ArgmaxLayer();
+	MemoryManager::getInstance().add(l);
+	return *l;
+}
