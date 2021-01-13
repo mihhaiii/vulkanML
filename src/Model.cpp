@@ -1,4 +1,5 @@
 #include "Model.h"
+#include "OperatorFunctionInterface.h"
 
 Model::Model(Tensor* input, Tensor* output, EnumDevice device)
 	: m_device(device),
@@ -175,7 +176,7 @@ void Model::showInfo()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Model::fit(Tensor* x, Tensor* y, int epochs)
+void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y)
 {
 	int samples = x->getShape().front();
 	assert(samples == y->getShape().front());
@@ -185,6 +186,11 @@ void Model::fit(Tensor* x, Tensor* y, int epochs)
 	setLearningRate();
 
 	randomWeightInit();
+
+	// apply softmax to compute accuracy
+	Tensor* inputArgmax = Input({ m_output->getSampleSize() });
+	Tensor* argmax = Argmax()(inputArgmax);
+	Model* argMaxModel = new Model(inputArgmax, argmax, m_device);
 
 	for (int e = 0; e < epochs; e++)
 	{
@@ -209,6 +215,26 @@ void Model::fit(Tensor* x, Tensor* y, int epochs)
 				sortedLayers[l]->backprop();
 			}
 		}
+
+		// compute train and test accuracy
+		Tensor* pred_train = run(x);
+		pred_train = argMaxModel->run(pred_train);
+
+		int train_correct_pred = 0, test_correct_pred = 0;
+		for (int i = 0; i < pred_train->getSize(); i++) {
+			if (pred_train->getData()[i] == y->getData()[i])
+				train_correct_pred++;
+		}
+
+		std::cout << "epoch " << e << "   train accuracy: " << (float)train_correct_pred / pred_train->getSize();
+
+		Tensor* pred_test = run(test_x);
+		pred_test = argMaxModel->run(pred_test);
+		for (int i = 0; i < pred_test->getSize(); i++) {
+			if (pred_test->getData()[i] == test_y->getData()[i])
+				test_correct_pred++;
+		}
+		std::cout << "   test accuracy: " << (float)test_correct_pred / pred_test->getSize() << "\n";
 	}
 }
 

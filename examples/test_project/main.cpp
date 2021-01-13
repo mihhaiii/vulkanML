@@ -30,6 +30,8 @@
 #include <stdlib.h>
 #include "Model.h"
 #include "SequentialModel.h"
+#include <algorithm>    // std::random_shuffle
+#include <random>
 
 void test_vulkan_operator_FC()
 {
@@ -490,22 +492,36 @@ void test_simle_mnist_model_with_batches()
 
 	namespace fs = std::filesystem;
 	Tensor* input = Input({ 28 * 28 * 1 });
-	Tensor* train_images = new Tensor({ 600, 28 * 28 * 1 }, DEVICE_CPU);
-	Tensor* train_labels = new Tensor({ 600 }, DEVICE_CPU);
-	int idx = 0;
-	int h, w, c;
 
+	std::vector<std::pair<std::string, int>> data;
 	for (int digit = 9; digit >= 0; digit--)
 	{
 		const std::string path = "trainingSample/" + std::to_string(digit);
 		for (auto& p : std::filesystem::recursive_directory_iterator(path.c_str()))
 		{
 			std::cout << p.path() << '\n';
-			float& dest = train_images->at({ idx,0 });
-			loadImage(p.path().string().c_str(), h, w, c, &dest);
-			train_labels->getData()[idx] = digit;
-			idx++;
+			data.push_back({ p.path().string(), digit });
 		}
+	}
+	int total_images_count = data.size();
+	int train_images_count = (int)(0.7 * total_images_count);
+	int test_images_count = total_images_count - train_images_count;
+
+	// shuffle images
+	auto rng = std::default_random_engine{};
+	std::shuffle(std::begin(data), std::end(data), rng);
+
+	// load data
+	Tensor* train_images = new Tensor({ train_images_count, 28 * 28 * 1 }, DEVICE_CPU);
+	Tensor* train_labels = new Tensor({ train_images_count }, DEVICE_CPU); 
+	Tensor* test_images = new Tensor({ test_images_count, 28 * 28 * 1 }, DEVICE_CPU);
+	Tensor* test_labels = new Tensor({ test_images_count }, DEVICE_CPU);
+	int h, w, c;
+	for (int i = 0; i < data.size(); i++) {
+		float& dest = i < train_images_count ? train_images->at({ i, 0 }) : test_images->at({ i - train_images_count, 0 });
+		loadImage(data[i].first.c_str(), h, w, c, &dest);
+		float& label = i < train_images_count ? train_labels->getData()[i] : test_labels->getData()[i - train_images_count];
+		label = data[i].second;
 	}
 
 	Tensor *y;
@@ -519,9 +535,9 @@ void test_simle_mnist_model_with_batches()
 
 	//m->readWeights("conv_mnist/simple_conv_mnist_batches");
 
-	m->fit(train_images, train_labels, 100);
+	m->fit(train_images, train_labels, 100, test_images, test_labels);
 
-	m->run(train_images);
+	m->run(test_images);
 	float* output = y->getData();
 
 	Tensor* input1 = Input({ 10 });
@@ -530,17 +546,17 @@ void test_simle_mnist_model_with_batches()
 	m1.run(y);
 
 	int correct = 0;
-	assert(output1->getSize() == train_labels->getSize());
+	assert(output1->getSize() == test_labels->getSize());
 	for (int i = 0; i < output1->getSize(); i++) {
-		if (i % 10 == 0) std::cout << "\n";
-		std::cout << output1->getData()[i] << " ";
-		if (output1->getData()[i] == train_labels->getData()[i]) {
+		std::cout << "\n";
+		std::cout << output1->getData()[i] << " " << test_labels->getData()[i];
+		if (output1->getData()[i] == test_labels->getData()[i]) {
 			correct++;
 		}
 	}
 	std::cout << "\n";
 	std::cout << "correct / total: " << correct << "/" << output1->getSize() << "\n";
-	std::cout << "accuracy on train data: " << (float)correct / output1->getSize() << "\n";
+	std::cout << "accuracy on test data: " << (float)correct / output1->getSize() << "\n";
 	/*for (int i = 0; i < y->getSize(); i++) {
 		if (i % 10 == 0) std::cout << "\n";
 		std::cout << output[i] << " ";

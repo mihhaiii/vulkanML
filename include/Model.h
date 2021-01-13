@@ -23,7 +23,7 @@ public:
 	int getParamCount();
 	void showInfo();
 
-	void fit(Tensor* x, Tensor* y, int epochs = 1);
+	void fit(Tensor* x, Tensor* y, int epochs = 1, Tensor* test_x = nullptr, Tensor* test_y = nullptr);
 
 private:
 	void setDevice();
