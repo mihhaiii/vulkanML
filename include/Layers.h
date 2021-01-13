@@ -37,8 +37,7 @@ public:
 
 	Tensor* getDerivativesTensor()
 	{
-		if (m_derivatives == nullptr || m_derivatives->getSize() != getOutputTensor()->getSize()) {
-			delete m_derivatives;
+		if (m_derivatives == nullptr) {
 			m_derivatives = createOwnedTensor(getOutputTensor()->getShape());
 		}
 		return m_derivatives;

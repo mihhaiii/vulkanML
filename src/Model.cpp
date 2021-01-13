@@ -81,6 +81,7 @@ void Model::setBatchSize()
 	for (Layer* l : sortedLayers) {
 		l->setBatchSize(batch_size);
 		l->getOutputTensor()->setBatchSize(batch_size);
+		l->getDerivativesTensor()->setBatchSize(batch_size);
 	}
 }
 
@@ -180,17 +181,17 @@ void Model::fit(Tensor* x, Tensor* y, int epochs)
 	assert(samples == y->getShape().front());
 	int sample_size = x->getSize() / samples;
 
-	batch_size = 32;
 	learning_rate = 0.01;
-	setBatchSize();
 	setLearningRate();
-
-	const int iterations = (samples + batch_size - 1) / batch_size;
 
 	randomWeightInit();
 
 	for (int e = 0; e < epochs; e++)
 	{
+		batch_size = 32;
+		setBatchSize();
+		const int iterations = (samples + batch_size - 1) / batch_size;
+
 		for (int iter = 0; iter < iterations; iter++)
 		{
 			int firstSampleFromBatch = iter * batch_size;

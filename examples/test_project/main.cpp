@@ -494,7 +494,8 @@ void test_simle_mnist_model_with_batches()
 	Tensor* train_labels = new Tensor({ 600 }, DEVICE_CPU);
 	int idx = 0;
 	int h, w, c;
-	for (int digit = 0; digit < 10; digit++)
+
+	for (int digit = 9; digit >= 0; digit--)
 	{
 		const std::string path = "trainingSample/" + std::to_string(digit);
 		for (auto& p : std::filesystem::recursive_directory_iterator(path.c_str()))
