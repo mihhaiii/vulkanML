@@ -4,6 +4,7 @@
 #include <iostream>
 #include "vuh/array.hpp"
 
+
 using Shape = std::vector<int>;
 
 int getShapeSize(const Shape& shape);
@@ -57,11 +58,13 @@ public:
 
 	void reshape(Shape newShape);
 
-	void randomWeightInit(const float factor);
+	void randomWeightInit(const float mean, const float standardDeviation);
 
 	Layer* getParentLayer() { return m_parentLayer; }
 
 	void setBatchSize(int batch_size);
+
+	void reset();
 
 	friend class Layer;
 private:

@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include "Tensor.h"
 #include "InstanceManager.h"
+#include <random>
+#include <time.h>
 
 int getShapeSize(const Shape& shape) {
 	int total = 1;
@@ -76,6 +78,7 @@ Tensor::~Tensor() {
 	delete[] m_data;
 	delete m_deviceData;
 	m_deviceData = nullptr;
+	m_data = nullptr;
 }
 
 int Tensor::getSampleSize()
@@ -116,16 +119,19 @@ void Tensor::reshape(Shape newShape)
 }
 
 
-void Tensor::randomWeightInit(const float factor)
+void Tensor::randomWeightInit(const float mean, const float standardDeviation)
 {
+	std::default_random_engine generator(time(0));
+	std::normal_distribution<float> distribution(mean, standardDeviation);
+
 	assert(!m_hasUnknownDim);
 	if (m_data == nullptr) {
 		m_data = new float[m_size];
 	}
 	for (int i = 0; i < m_size; i++) {
-		m_data[i] = ((double)rand() / (RAND_MAX)) * factor;
+		m_data[i] = distribution(generator);
 	}
-	if (m_device * DEVICE_VULKAN) {
+	if (m_device & DEVICE_VULKAN) {
 		m_deviceData->fromHost(m_data, m_data + m_size);
 	}
 }
@@ -165,6 +171,7 @@ void Tensor::setDevice(EnumDevice device) {
 	{
 		if (m_data == nullptr) {
 			m_data = new float[m_size];
+			reset();
 		}
 		if (prevDevice == DEVICE_VULKAN) {
 			m_deviceData->toHost(m_data);
@@ -181,6 +188,12 @@ void Tensor::setDevice(EnumDevice device) {
 		}
 	}
 
+}
+
+void Tensor::reset()
+{
+	for (int i = 0; i < m_size; i++)
+		m_data[i] = 0;
 }
 
 bool Tensor::inc(Shape& it)
@@ -229,6 +242,8 @@ void Tensor::setBatchSize(int batch_size)
 	m_size = getShapeSize(m_shape);
 	delete[] m_data;
 	delete m_deviceData;
+	m_data = nullptr;
+	m_deviceData = nullptr;
 	setDevice(m_device); // allocate memory now
 	createShapeSuffixProduct(); // update the suffix product vector as the shape is entirely known now
 }

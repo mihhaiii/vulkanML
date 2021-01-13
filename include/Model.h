@@ -23,7 +23,7 @@ public:
 	int getParamCount();
 	void showInfo();
 
-	void fit(Tensor* x, Tensor* y);
+	void fit(Tensor* x, Tensor* y, int epochs = 1);
 
 private:
 	void setDevice();
@@ -31,6 +31,7 @@ private:
 	void topologicalSort();
 	void dfs(Layer* l, std::set<Layer*>& visited);
 	void setBatchSize();
+	void setLearningRate();
 
 private:
 	std::vector<Tensor*> m_inputs;
@@ -38,5 +39,6 @@ private:
 	std::vector<Layer*> sortedLayers;
 
 	int batch_size;
+	float learning_rate;
 	EnumDevice m_device;
 };

@@ -489,8 +489,8 @@ void test_simle_mnist_model_with_batches()
 {
 
 	namespace fs = std::filesystem;
-	Tensor* input = Input({ 28,28,1 });
-	Tensor* train_images = new Tensor({ 600,28,28,1 }, DEVICE_CPU);
+	Tensor* input = Input({ 28 * 28 * 1 });
+	Tensor* train_images = new Tensor({ 600, 28 * 28 * 1 }, DEVICE_CPU);
 	Tensor* train_labels = new Tensor({ 600 }, DEVICE_CPU);
 	int idx = 0;
 	int h, w, c;
@@ -500,7 +500,7 @@ void test_simle_mnist_model_with_batches()
 		for (auto& p : std::filesystem::recursive_directory_iterator(path.c_str()))
 		{
 			std::cout << p.path() << '\n';
-			float& dest = train_images->at({ idx,0,0,0 });
+			float& dest = train_images->at({ idx,0 });
 			loadImage(p.path().string().c_str(), h, w, c, &dest);
 			train_labels->getData()[idx] = digit;
 			idx++;
@@ -508,24 +508,42 @@ void test_simle_mnist_model_with_batches()
 	}
 
 	Tensor *y;
-	y = Dense(64)(input);
-	y = ReLU()(y);
+	y = Dense(64, true)(input);
+	//y = ReLU()(y);
 	y = Dense(10)(y);
 	y = Softmax()(y);
-	y = Argmax()(y);
+	//y = Argmax()(y);
 
-	Model* m = new Model(input, y, EnumDevice::DEVICE_VULKAN);
+	Model* m = new Model(input, y, EnumDevice::DEVICE_CPU);
 
-	m->readWeights("conv_mnist/simple_conv_mnist_batches");
+	//m->readWeights("conv_mnist/simple_conv_mnist_batches");
 
-	//m->fit(train_images, train_labels);
+	m->fit(train_images, train_labels, 100);
 
 	m->run(train_images);
 	float* output = y->getData();
-	for (int i = 0; i < y->getSize(); i++) {
+
+	Tensor* input1 = Input({ 10 });
+	Tensor* output1 = Argmax()(input1);
+	Model m1(input1, output1, DEVICE_CPU);
+	m1.run(y);
+
+	int correct = 0;
+	assert(output1->getSize() == train_labels->getSize());
+	for (int i = 0; i < output1->getSize(); i++) {
+		if (i % 10 == 0) std::cout << "\n";
+		std::cout << output1->getData()[i] << " ";
+		if (output1->getData()[i] == train_labels->getData()[i]) {
+			correct++;
+		}
+	}
+	std::cout << "\n";
+	std::cout << "correct / total: " << correct << "/" << output1->getSize() << "\n";
+	std::cout << "accuracy on train data: " << (float)correct / output1->getSize() << "\n";
+	/*for (int i = 0; i < y->getSize(); i++) {
 		if (i % 10 == 0) std::cout << "\n";
 		std::cout << output[i] << " ";
-	}
+	}*/
 }
 
 

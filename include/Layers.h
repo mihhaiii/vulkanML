@@ -6,7 +6,7 @@ class Layer
 {
 public:
 	Layer(EnumDevice _device = DEVICE_UNSPECIFIED)
-		: m_device(_device), m_isInputLinked(false) {}
+		: m_device(_device), m_isInputLinked(false), m_derivatives(nullptr) {}
 	virtual void forward() = 0;
 	virtual Tensor* getOutputTensor() = 0;
 	std::vector<Layer*>& getOutgoingLayers() { return m_outgoingLayers; }
@@ -25,10 +25,23 @@ public:
 		m_batch_size = batch_size;
 	}
 
+	void setLearningRate(float learning_rate) {
+		m_learning_rate = learning_rate;
+	}
+
 	static void addConnection(Layer* from, Layer* to)
 	{
 		from->m_outgoingLayers.push_back(to);
 		to->m_inputLayers.push_back(from);
+	}
+
+	Tensor* getDerivativesTensor()
+	{
+		if (m_derivatives == nullptr || m_derivatives->getSize() != getOutputTensor()->getSize()) {
+			delete m_derivatives;
+			m_derivatives = createOwnedTensor(getOutputTensor()->getShape());
+		}
+		return m_derivatives;
 	}
 
 	// link input(s) to layer and returns output layer
@@ -60,8 +73,9 @@ public:
 		std::cout << typeid(*this).name() << "		output_shape: " << getOutputTensor()->getShape() << "	 params: " << getParamCount() << '\n';
 	}
 
-	virtual void randomWeightInit(const float factor) {}
+	virtual void randomWeightInit() {}
 	virtual void backprop() {}
+	virtual void backprop(Tensor* ground_truth, int offset) {}
 
 	virtual ~Layer()
 	{
@@ -84,9 +98,11 @@ protected:
 	std::vector<Layer*>	m_outgoingLayers;
 	std::vector<Tensor*> m_ownedTensors;
 
+	Tensor* m_derivatives; // used in backpropagation
 	EnumDevice m_device;
 	bool m_isInputLinked;
 	int m_batch_size;
+	float m_learning_rate;
 };
 
 class Conv2dLayer : public Layer
@@ -163,9 +179,9 @@ public:
 	void readWeights(FILE* file);
 	void readBiases(FILE* file);
 	virtual void forward();
-	virtual void randomWeightInit(const float factor);
+	virtual void randomWeightInit();
 	Tensor* getOutputTensor() { return m_output; }
-
+	virtual void backprop();
 private:
 
 	int m_numNeurons;
@@ -222,6 +238,7 @@ public:
 
 	virtual void forward();
 	Tensor* getOutputTensor() { return m_input; }
+	virtual void backprop();
 
 private:
 	Tensor* m_input;
@@ -260,6 +277,8 @@ public:
 
 	virtual void forward();
 	Tensor* getOutputTensor() { return m_output; }
+
+	virtual void backprop(Tensor* ground_truth, int offset);
 
 private:
 	Tensor* m_input;

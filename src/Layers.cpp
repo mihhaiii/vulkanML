@@ -205,10 +205,61 @@ void FCLayer::forward() {
 	}
 }
 
-void FCLayer::randomWeightInit(const float factor)
+void FCLayer::randomWeightInit()
 {
-	m_weights->randomWeightInit(factor);
-	m_biases->randomWeightInit(factor);
+	float standardDeviation = sqrt(2. / m_input->getSampleSize());
+	float mean = 0.f;
+	m_weights->randomWeightInit(mean, standardDeviation);
+	m_biases->randomWeightInit(mean, standardDeviation);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void FCLayer::backprop()
+{
+	assert(m_derivatives);
+	Tensor* prev_derivatives = m_input->getParentLayer()->getDerivativesTensor();
+	prev_derivatives->reset();
+
+	float* prev_derivativeData = prev_derivatives->getData();
+	float* derivativeData = m_derivatives->getData();
+	float* weightsData = m_weights->getData();
+	float* biasesData = m_biases->getData();
+	float* inputData = m_input->getData();
+
+	if (m_applyRelu) {
+		for (int i = 0; i < m_output->getSize(); i++) {
+			derivativeData[i] = m_output->getData()[i] == 0 ? 0 : derivativeData[i];
+		}
+	}
+
+	for (int b = 0; b < m_batch_size; b++) {
+		for (int i = 0; i < m_numNeuronsLastLayer; i++) {
+			for (int j = 0; j < m_numNeurons; j++) {
+				//prev_derivatives->at({ b, i }) += m_derivatives->at({ b, j }) * m_weights->at({i, j});
+				prev_derivativeData[ b * m_numNeuronsLastLayer + i ] += derivativeData[ b * m_numNeurons + j ] * weightsData[i * m_numNeurons + j];
+			}
+		}
+	}
+
+	float deriv = 0;
+	for (int i = 0; i < m_numNeuronsLastLayer; i++) {
+		for (int j = 0; j < m_numNeurons; j++) {
+			deriv = 0;
+			for (int b = 0; b < m_batch_size; b++) {
+				deriv += derivativeData[ b * m_numNeurons + j ] * inputData[ b * m_numNeuronsLastLayer + i ];
+			}
+			weightsData[i * m_numNeurons + j] -= m_learning_rate * deriv;
+		}
+	}
+
+	for (int j = 0; j < m_numNeurons; j++) {
+		deriv = 0;
+		for (int b = 0; b < m_batch_size; b++) {
+			deriv += derivativeData[b * m_numNeurons + j];
+		}
+		biasesData[j] -= m_learning_rate * deriv;
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -230,6 +281,18 @@ void ReLULayer::init(const std::vector<Tensor*>& inputs)
 		vulkan_operator_relu(m_input->getDeviceData(), m_input->getDeviceData(), m_input->getSize());
 	}
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+ void ReLULayer::backprop()
+ {
+	 assert(m_derivatives);
+	 Tensor* prev_derivatives = m_input->getParentLayer()->getDerivativesTensor();
+
+	 for (int i = 0; i < m_input->getSize(); i++) {
+		 prev_derivatives->getData()[i] = m_input->getData()[i] < 0 ? 0 : m_derivatives->getData()[i];
+	 }
+ }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -430,6 +493,30 @@ void SoftmaxLayer::forward()
 	}
 	else if (m_device == EnumDevice::DEVICE_VULKAN) {
 		vulkan_operator_softmax(m_input->getDeviceData(), m_output->getDeviceData(), m_batch_size, m_input->getSampleSize());
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void SoftmaxLayer::backprop(Tensor* ground_truth, int offset)
+{
+	// assume loss = sparse categorical cross entropy and ground_truth format is NOT one-hot
+
+	if (m_device == EnumDevice::DEVICE_CPU) {
+		
+		Tensor* derivatives = m_input->getParentLayer()->getDerivativesTensor();
+		derivatives->reset();
+		int sample_size = derivatives->getSampleSize();
+
+		float inv_batch_size = 1.f / m_batch_size;
+		for (int b = 0; b < m_batch_size; b++) {
+			for (int i = 0; i < sample_size; i++) {
+					derivatives->at({ b,i }) += inv_batch_size * (m_output->at({ b, i }) - (round(ground_truth->getData()[offset + b]) == i ? 1 : 0));
+			}
+		}
+	}
+	else if (m_device == EnumDevice::DEVICE_VULKAN) {
+		assert(false);
 	}
 }
 

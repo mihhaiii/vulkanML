@@ -86,6 +86,15 @@ void Model::setBatchSize()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+void Model::setLearningRate()
+{
+	for (Layer* l : sortedLayers) {
+		l->setLearningRate(learning_rate);
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void Model::readWeights(const char* filename, int ignoreFirst)
 {
 	FILE* file = fopen(filename, "rb");
@@ -165,27 +174,39 @@ void Model::showInfo()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Model::fit(Tensor* x, Tensor* y)
+void Model::fit(Tensor* x, Tensor* y, int epochs)
 {
 	int samples = x->getShape().front();
 	assert(samples == y->getShape().front());
-	int numInputsPerSample = x->getSize() / samples;
-	const int batch_size = 32;
+	int sample_size = x->getSize() / samples;
+
+	batch_size = 32;
+	learning_rate = 0.01;
+	setBatchSize();
+	setLearningRate();
 
 	const int iterations = (samples + batch_size - 1) / batch_size;
 
 	randomWeightInit();
 
-	for (int iter = 0; iter < iterations; iter++)
+	for (int e = 0; e < epochs; e++)
 	{
-		int firstSampleFromBatch = iter * batch_size;
-		int lastSampleFromBatch = (std::min)(firstSampleFromBatch + batch_size, samples);
-
-		Tensor* out = run(&x->getData()[firstSampleFromBatch * numInputsPerSample], batch_size * numInputsPerSample);
-
-		for (int l = sortedLayers.size() - 1; l >= 0; l--)
+		for (int iter = 0; iter < iterations; iter++)
 		{
-			sortedLayers[l]->backprop();
+			int firstSampleFromBatch = iter * batch_size;
+			int lastSampleFromBatch = (std::min)(firstSampleFromBatch + batch_size, samples);
+			int current_batch_size = lastSampleFromBatch - firstSampleFromBatch;
+
+			Tensor* out = run(&x->getData()[firstSampleFromBatch * sample_size], current_batch_size * sample_size);
+
+			assert(m_output == out);
+			m_output->getParentLayer()->backprop(y, firstSampleFromBatch);
+			for (int l = sortedLayers.size() - 1; l >= 0; l--)
+			{
+				if (sortedLayers[l] == m_output->getParentLayer())
+					continue;
+				sortedLayers[l]->backprop();
+			}
 		}
 	}
 }
@@ -195,7 +216,7 @@ void Model::fit(Tensor* x, Tensor* y)
 void Model::randomWeightInit()
 {
 	for (Layer* l : sortedLayers) {
-		l->randomWeightInit(0.01);
+		l->randomWeightInit();
 	}
 }
 
