@@ -176,7 +176,7 @@ void Model::showInfo()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y)
+void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y, bool printAccuracy)
 {
 	int samples = x->getShape().front();
 	assert(samples == y->getShape().front());
@@ -192,6 +192,7 @@ void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y
 	Tensor* argmax = Argmax()(inputArgmax);
 	Model* argMaxModel = new Model(inputArgmax, argmax, m_device);
 
+	y->setDevice(m_device);
 	for (int e = 0; e < epochs; e++)
 	{
 		batch_size = 32;
@@ -215,26 +216,31 @@ void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y
 				sortedLayers[l]->backprop();
 			}
 		}
+		if (printAccuracy) {
+			// compute train and test accuracy
+			Tensor* pred_train = run(x);
+			pred_train = argMaxModel->run(pred_train);
 
-		// compute train and test accuracy
-		Tensor* pred_train = run(x);
-		pred_train = argMaxModel->run(pred_train);
+			int train_correct_pred = 0, test_correct_pred = 0;
+			float* pred_train_data = pred_train->getData();
+			float* y_data = y->getData();
+			for (int i = 0; i < pred_train->getSize(); i++) {
+				if (pred_train_data[i] == y_data[i])
+					train_correct_pred++;
+			}
 
-		int train_correct_pred = 0, test_correct_pred = 0;
-		for (int i = 0; i < pred_train->getSize(); i++) {
-			if (pred_train->getData()[i] == y->getData()[i])
-				train_correct_pred++;
-		}
+			std::cout << "epoch " << e << "   train accuracy: " << (float)train_correct_pred / pred_train->getSize();
 
-		std::cout << "epoch " << e << "   train accuracy: " << (float)train_correct_pred / pred_train->getSize();
-
-		Tensor* pred_test = run(test_x);
-		pred_test = argMaxModel->run(pred_test);
-		for (int i = 0; i < pred_test->getSize(); i++) {
-			if (pred_test->getData()[i] == test_y->getData()[i])
-				test_correct_pred++;
-		}
-		std::cout << "   test accuracy: " << (float)test_correct_pred / pred_test->getSize() << "\n";
+			Tensor* pred_test = run(test_x);
+			pred_test = argMaxModel->run(pred_test);
+			float* pred_test_data = pred_test->getData();
+			float* test_y_data = test_y->getData();
+			for (int i = 0; i < pred_test->getSize(); i++) {
+				if (pred_test_data[i] == test_y_data[i])
+					test_correct_pred++;
+			}
+			std::cout << "   test accuracy: " << (float)test_correct_pred / pred_test->getSize() << "\n";
+		}	
 	}
 }
 

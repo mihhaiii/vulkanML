@@ -219,46 +219,52 @@ void FCLayer::backprop()
 {
 	assert(m_derivatives);
 	Tensor* prev_derivatives = m_input->getParentLayer()->getDerivativesTensor();
-	prev_derivatives->reset();
 
-	float* prev_derivativeData = prev_derivatives->getData();
-	float* derivativeData = m_derivatives->getData();
-	float* weightsData = m_weights->getData();
-	float* biasesData = m_biases->getData();
-	float* inputData = m_input->getData();
+	if (m_device == DEVICE_CPU) {
+		prev_derivatives->reset();
+		float* prev_derivativeData = prev_derivatives->getData();
+		float* derivativeData = m_derivatives->getData();
+		float* weightsData = m_weights->getData();
+		float* biasesData = m_biases->getData();
+		float* inputData = m_input->getData();
 
-	if (m_applyRelu) {
-		for (int i = 0; i < m_output->getSize(); i++) {
-			derivativeData[i] = m_output->getData()[i] == 0 ? 0 : derivativeData[i];
-		}
-	}
-
-	for (int b = 0; b < m_batch_size; b++) {
-		for (int i = 0; i < m_numNeuronsLastLayer; i++) {
-			for (int j = 0; j < m_numNeurons; j++) {
-				//prev_derivatives->at({ b, i }) += m_derivatives->at({ b, j }) * m_weights->at({i, j});
-				prev_derivativeData[ b * m_numNeuronsLastLayer + i ] += derivativeData[ b * m_numNeurons + j ] * weightsData[i * m_numNeurons + j];
+		if (m_applyRelu) {
+			for (int i = 0; i < m_output->getSize(); i++) {
+				derivativeData[i] = m_output->getData()[i] == 0 ? 0 : derivativeData[i];
 			}
 		}
-	}
 
-	float deriv = 0;
-	for (int i = 0; i < m_numNeuronsLastLayer; i++) {
+		for (int b = 0; b < m_batch_size; b++) {
+			for (int i = 0; i < m_numNeuronsLastLayer; i++) {
+				for (int j = 0; j < m_numNeurons; j++) {
+					//prev_derivatives->at({ b, i }) += m_derivatives->at({ b, j }) * m_weights->at({i, j});
+					prev_derivativeData[b * m_numNeuronsLastLayer + i] += derivativeData[b * m_numNeurons + j] * weightsData[i * m_numNeurons + j];
+				}
+			}
+		}
+
+		float deriv = 0;
+		for (int i = 0; i < m_numNeuronsLastLayer; i++) {
+			for (int j = 0; j < m_numNeurons; j++) {
+				deriv = 0;
+				for (int b = 0; b < m_batch_size; b++) {
+					deriv += derivativeData[b * m_numNeurons + j] * inputData[b * m_numNeuronsLastLayer + i];
+				}
+				weightsData[i * m_numNeurons + j] -= m_learning_rate * deriv;
+			}
+		}
+
 		for (int j = 0; j < m_numNeurons; j++) {
 			deriv = 0;
 			for (int b = 0; b < m_batch_size; b++) {
-				deriv += derivativeData[ b * m_numNeurons + j ] * inputData[ b * m_numNeuronsLastLayer + i ];
+				deriv += derivativeData[b * m_numNeurons + j];
 			}
-			weightsData[i * m_numNeurons + j] -= m_learning_rate * deriv;
+			biasesData[j] -= m_learning_rate * deriv;
 		}
 	}
-
-	for (int j = 0; j < m_numNeurons; j++) {
-		deriv = 0;
-		for (int b = 0; b < m_batch_size; b++) {
-			deriv += derivativeData[b * m_numNeurons + j];
-		}
-		biasesData[j] -= m_learning_rate * deriv;
+	else if (m_device == DEVICE_VULKAN) {
+		vulkan_operator_FC_backprop(m_input->getDeviceData(), m_weights->getDeviceData(), m_biases->getDeviceData(),
+			m_derivatives->getDeviceData(), prev_derivatives->getDeviceData(), m_output->getDeviceData(), m_numNeuronsLastLayer, m_numNeurons, m_batch_size, m_applyRelu, m_learning_rate);
 	}
 }
 
@@ -501,13 +507,11 @@ void SoftmaxLayer::forward()
 void SoftmaxLayer::backprop(Tensor* ground_truth, int offset)
 {
 	// assume loss = sparse categorical cross entropy and ground_truth format is NOT one-hot
+	Tensor* derivatives = m_input->getParentLayer()->getDerivativesTensor();
+	int sample_size = derivatives->getSampleSize();
 
 	if (m_device == EnumDevice::DEVICE_CPU) {
-		
-		Tensor* derivatives = m_input->getParentLayer()->getDerivativesTensor();
 		derivatives->reset();
-		int sample_size = derivatives->getSampleSize();
-
 		float inv_batch_size = 1.f / m_batch_size;
 		for (int b = 0; b < m_batch_size; b++) {
 			for (int i = 0; i < sample_size; i++) {
@@ -516,7 +520,7 @@ void SoftmaxLayer::backprop(Tensor* ground_truth, int offset)
 		}
 	}
 	else if (m_device == EnumDevice::DEVICE_VULKAN) {
-		assert(false);
+		vulkan_operator_softmax_backprop(derivatives->getDeviceData(), m_output->getDeviceData(), ground_truth->getDeviceData(), offset, m_batch_size, sample_size);
 	}
 }
 

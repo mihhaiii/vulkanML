@@ -1,0 +1,23 @@
+#version 440
+
+layout(local_size_x_id = 0) in;             // workgroup size set with specialization constant
+layout(push_constant) uniform Parameters {  // push constants
+	int batch_size, sample_size, ground_truth_offset;
+} params;
+
+layout(std430, binding = 0) buffer lay0 { float derivatives[]; }; // array parameters
+layout(std430, binding = 1) buffer lay1 { float outputs[]; }; // array parameters
+layout(std430, binding = 2) buffer lay2 { float ground_truth[]; }; // array parameters
+
+void main(){
+   const uint b = gl_GlobalInvocationID.x; 
+   
+   if(b >= params.batch_size){
+      return;
+   }
+   
+	float inv_batch_size = 1.f / params.batch_size;
+	for (int i = 0; i < params.sample_size; i++) {
+			derivatives[b * params.sample_size + i] = inv_batch_size * (outputs[b * params.sample_size + i] - (round(ground_truth[params.ground_truth_offset + b]) == i ? 1 : 0));
+	}
+}

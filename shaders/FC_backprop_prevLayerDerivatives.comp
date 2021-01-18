@@ -1,0 +1,29 @@
+#version 440
+
+layout(local_size_x_id = 0) in;             // workgroup size set with specialization constant
+layout(push_constant) uniform Parameters {  // push constants
+	int numNeuronsLastLayer; 
+	int numNeurons; 
+	int batch_size; 
+	bool applyRelu;
+} params;
+
+layout(std430, binding = 0) buffer lay0 { float derivatives[]; }; // array parameters
+layout(std430, binding = 1) buffer lay1 { float prev_derivatives[]; }; // array parameters
+layout(std430, binding = 2) buffer lay2 { float weights[]; }; // array parameters
+
+void main(){
+   const uint globalId = gl_GlobalInvocationID.x; 
+   if(globalId >= params.numNeuronsLastLayer){
+      return;
+   }
+   
+   // compute prev layer derivatives
+   for (int b = 0; b < params.batch_size; b++) {
+			prev_derivatives[b * params.numNeuronsLastLayer + globalId] = 0;
+			for (int j = 0; j < params.numNeurons; j++) {
+				prev_derivatives[b * params.numNeuronsLastLayer + globalId] += derivatives[b * params.numNeurons + j] * weights[globalId * params.numNeurons + j];
+			}
+	}
+	
+}

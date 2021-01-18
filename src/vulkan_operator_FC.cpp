@@ -52,3 +52,30 @@ void vulkan_operator_FC(vuh::Array<float>* inputs, vuh::Array<float>* weigths, v
 	if (outTime)
 		*outTime = (float)(clock() - start) / CLOCKS_PER_SEC;
 }
+
+void vulkan_operator_FC_backprop(vuh::Array<float>* inputs, vuh::Array<float>* weigths, vuh::Array<float>* biases, vuh::Array<float>* derivatives, 
+	vuh::Array<float>* prev_derivatives, vuh::Array<float>* outputs,
+	int numNeuronsLastLayer, int numNeurons, int batch_size, bool applyRelu, float learning_rate, float* outTime)
+{
+	using Specs = vuh::typelist<uint32_t>;
+	struct Params { int numNeuronsLastLayer; int numNeurons; int batch_size; bool applyRelu; };
+	const int groupSize = 128;
+	int numGroups = (numNeurons + groupSize - 1) / groupSize;
+
+	// apply relu
+	if (applyRelu) {
+		static auto program1 = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "FC_backprop_applyRelu.spv");
+		program1.grid(numGroups).spec(groupSize)({ numNeuronsLastLayer, numNeurons, batch_size, applyRelu }, *derivatives, *outputs);
+	}
+
+	// compute last layer derivatives
+	numGroups = (numNeuronsLastLayer + groupSize - 1) / groupSize;
+	static auto program2 = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "FC_backprop_prevLayerDerivatives.spv");
+	program2.grid(numGroups).spec(groupSize)({ numNeuronsLastLayer, numNeurons, batch_size, applyRelu }, *derivatives, *prev_derivatives, *weigths);
+
+	// update weights and biases
+	numGroups = (numNeurons + groupSize - 1) / groupSize;
+	struct Params1 { int numNeuronsLastLayer; int numNeurons; int batch_size; bool applyRelu; float learning_rate; };
+	static auto program3 = vuh::Program<Specs, Params1>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "FC_backprop_updateWeights.spv");
+	program3.grid(numGroups).spec(groupSize)({ numNeuronsLastLayer, numNeurons, batch_size, applyRelu, learning_rate }, * inputs, * weigths, * biases, * derivatives, * prev_derivatives, * outputs);
+}
