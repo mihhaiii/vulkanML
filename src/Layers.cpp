@@ -221,8 +221,7 @@ void FCLayer::backprop()
 	Tensor* prev_derivatives = m_input->getParentLayer()->getDerivativesTensor();
 
 	if (m_device == DEVICE_CPU) {
-		prev_derivatives->reset();
-		float* prev_derivativeData = prev_derivatives->getData();
+		float* prev_derivativeData = prev_derivatives ? prev_derivatives->getData() : nullptr;
 		float* derivativeData = m_derivatives->getData();
 		float* weightsData = m_weights->getData();
 		float* biasesData = m_biases->getData();
@@ -234,15 +233,18 @@ void FCLayer::backprop()
 			}
 		}
 
-		for (int b = 0; b < m_batch_size; b++) {
-			for (int i = 0; i < m_numNeuronsLastLayer; i++) {
-				for (int j = 0; j < m_numNeurons; j++) {
-					//prev_derivatives->at({ b, i }) += m_derivatives->at({ b, j }) * m_weights->at({i, j});
-					prev_derivativeData[b * m_numNeuronsLastLayer + i] += derivativeData[b * m_numNeurons + j] * weightsData[i * m_numNeurons + j];
+		if (prev_derivativeData) {
+			for (int b = 0; b < m_batch_size; b++) {
+				for (int i = 0; i < m_numNeuronsLastLayer; i++) {
+					prev_derivativeData[b * m_numNeuronsLastLayer + i] = 0;
+					for (int j = 0; j < m_numNeurons; j++) {
+						//prev_derivatives->at({ b, i }) += m_derivatives->at({ b, j }) * m_weights->at({i, j});
+						prev_derivativeData[b * m_numNeuronsLastLayer + i] += derivativeData[b * m_numNeurons + j] * weightsData[i * m_numNeurons + j];
+					}
 				}
 			}
 		}
-
+		
 		float deriv = 0;
 		for (int i = 0; i < m_numNeuronsLastLayer; i++) {
 			for (int j = 0; j < m_numNeurons; j++) {

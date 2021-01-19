@@ -21,8 +21,11 @@ public:
 		}
 	}
 
-	virtual void setBatchSize(int batch_size) {
+	virtual void setBatchSize(int batch_size, bool training = false) {
 		m_batch_size = batch_size;
+		getOutputTensor()->setBatchSize(batch_size);
+		if (training)
+			getDerivativesTensor()->setBatchSize(batch_size);
 	}
 
 	void setLearningRate(float learning_rate) {
@@ -35,7 +38,7 @@ public:
 		to->m_inputLayers.push_back(from);
 	}
 
-	Tensor* getDerivativesTensor()
+	virtual Tensor* getDerivativesTensor()
 	{
 		if (m_derivatives == nullptr) {
 			m_derivatives = createOwnedTensor(getOutputTensor()->getShape());
@@ -202,6 +205,7 @@ public:
 		m_data = createOwnedTensor(m_shape);
 		if (binFile)
 			m_data->readData(binFile);
+		m_data->setIsTensorView();
 	}
 
 	virtual int getParamCount() override {
@@ -212,12 +216,21 @@ public:
 		assert(false); // input layer does not have other inputs
 	}
 
-	void fill(const std::vector<float>& src) {
+	void fill(std::vector<float>& src) {
 		m_data->setData(&src[0], src.size());
 	}
 
 	virtual void forward() {}
 	Tensor* getOutputTensor() { return m_data; }
+
+	virtual void setBatchSize(int batch_size, bool training = false) {
+		m_batch_size = batch_size;
+		getOutputTensor()->setBatchSize(batch_size);
+	}
+
+	virtual Tensor* getDerivativesTensor() {
+		return nullptr;
+	}
 
 private:
 	Shape m_shape;

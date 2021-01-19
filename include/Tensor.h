@@ -28,12 +28,13 @@ class Layer;
 class Tensor
 {
 public:
-	Tensor(const Shape& shape, EnumDevice device = EnumDevice::DEVICE_UNSPECIFIED, const char* binFile = nullptr);
+	Tensor(const Shape& shape, EnumDevice device = EnumDevice::DEVICE_UNSPECIFIED, bool isTensorView = false, const char* binFile = nullptr);
 	~Tensor();
 
 	void createShapeSuffixProduct();
 
 	void setDevice(EnumDevice device);
+	void setIsTensorView() { m_isTensorView = true; }
 
 	EnumDevice getDevice() { return m_device; }
 
@@ -45,7 +46,7 @@ public:
 
 	void readData(FILE* file);
 
-	void setData(const float* data, int size);
+	void setData(float* data, int size);
 
 	float* getData();
 	vuh::Array<float>* getDeviceData() { return m_deviceData; }
@@ -79,5 +80,6 @@ private:
 	vuh::Array<float>* m_deviceData;
 	EnumDevice m_device;
 
+	bool m_isTensorView; // does not own the memory (doesn't do allocations/deletion) instead just points to an external block of data
 	Layer* m_parentLayer; // the layer that owns this tensor or the last last layer that modifies this tensor
 };

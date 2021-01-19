@@ -1,5 +1,6 @@
 #include "Model.h"
 #include "OperatorFunctionInterface.h"
+#include <time.h>
 
 Model::Model(Tensor* input, Tensor* output, EnumDevice device)
 	: m_device(device),
@@ -36,33 +37,40 @@ Tensor* Model::run()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Tensor* Model::run(const float* inputData, const int size)
+Tensor* Model::run(float* inputData, const int size, bool training)
 {
+	clock_t start = clock();
 	assert(m_inputs.size() == 1);
 	batch_size = size / m_inputs[0]->getSampleSize();
-	setBatchSize();
+	setBatchSize(training);
+	float t1 = (float)(clock() - start) / CLOCKS_PER_SEC;
+	start = clock();
 	m_inputs[0]->setData(inputData, size);
-	return run();
+	float t2 = (float)(clock() - start) / CLOCKS_PER_SEC;
+	start = clock();
+	Tensor* res = run();
+	float t3 = (float)(clock() - start) / CLOCKS_PER_SEC;
+	return res;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-Tensor* Model::run(const std::vector<float>& input)
+Tensor* Model::run(std::vector<float>& input, bool training)
 {
-	return run(&input[0], input.size());
+	return run(&input[0], input.size(), training);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Tensor* Model::run(Tensor* inputTensor)
+Tensor* Model::run(Tensor* inputTensor, bool training)
 {
-	return run(inputTensor->getData(), inputTensor->getSize());
+	return run(inputTensor->getData(), inputTensor->getSize(), training);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Tensor* Model::run(const std::vector<std::vector<float>>& inputs)
+Tensor* Model::run(std::vector<std::vector<float>>& inputs)
 {
 	setDevice();
 	assert(inputs.size() == m_inputs.size());
@@ -77,12 +85,10 @@ Tensor* Model::run(const std::vector<std::vector<float>>& inputs)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Model::setBatchSize()
+void Model::setBatchSize(bool training)
 {
 	for (Layer* l : sortedLayers) {
-		l->setBatchSize(batch_size);
-		l->getOutputTensor()->setBatchSize(batch_size);
-		l->getDerivativesTensor()->setBatchSize(batch_size);
+		l->setBatchSize(batch_size, training);
 	}
 }
 
@@ -193,29 +199,47 @@ void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y
 	Model* argMaxModel = new Model(inputArgmax, argmax, m_device);
 
 	y->setDevice(m_device);
+	float t1 = 0, t2 = 0, t3 = 0, t4 = 0, t5 = 0;
+	clock_t start;
 	for (int e = 0; e < epochs; e++)
 	{
-		batch_size = 32;
+		start = clock(); // measure only execution time, without data transfer
+
+
+		batch_size = 42;
 		setBatchSize();
 		const int iterations = (samples + batch_size - 1) / batch_size;
 
+		t1 += (float)(clock() - start) / CLOCKS_PER_SEC;
+		
+		
 		for (int iter = 0; iter < iterations; iter++)
 		{
 			int firstSampleFromBatch = iter * batch_size;
 			int lastSampleFromBatch = (std::min)(firstSampleFromBatch + batch_size, samples);
 			int current_batch_size = lastSampleFromBatch - firstSampleFromBatch;
 
-			Tensor* out = run(&x->getData()[firstSampleFromBatch * sample_size], current_batch_size * sample_size);
+			start = clock();
+
+			Tensor* out = run(&x->getData()[firstSampleFromBatch * sample_size], current_batch_size * sample_size, true);
+
+			t2 += (float)(clock() - start) / CLOCKS_PER_SEC;
+
+			start = clock();
 
 			assert(m_output == out);
 			m_output->getParentLayer()->backprop(y, firstSampleFromBatch);
+			t3 += (float)(clock() - start) / CLOCKS_PER_SEC;
+			start = clock();
 			for (int l = sortedLayers.size() - 1; l >= 0; l--)
 			{
 				if (sortedLayers[l] == m_output->getParentLayer())
 					continue;
 				sortedLayers[l]->backprop();
 			}
+			t4 += (float)(clock() - start) / CLOCKS_PER_SEC;
 		}
+		start = clock();
 		if (printAccuracy) {
 			// compute train and test accuracy
 			Tensor* pred_train = run(x);
@@ -240,7 +264,10 @@ void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y
 					test_correct_pred++;
 			}
 			std::cout << "   test accuracy: " << (float)test_correct_pred / pred_test->getSize() << "\n";
-		}	
+		}
+		t5 += (float)(clock() - start) / CLOCKS_PER_SEC;
+
+		std::cout << t1 << " " << t2 << " " << t3 << " " << t4 << " " << t5 << "\n";
 	}
 }
 

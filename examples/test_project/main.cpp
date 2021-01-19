@@ -87,7 +87,8 @@ void test_vulkan_operator_FC1()
 
 	m->readWeights("myfile.bin"); // all weigts set to 1
 	
-	m->run({ 1,2,3,4 });
+	std::vector<float> input = { 1,2,3,4 };
+	m->run(input);
 
 	assert(y->getData()[0] == 4);
 	assert(y->getData()[1] == 4);
@@ -535,7 +536,7 @@ void test_simle_mnist_model_with_batches()
 
 	//m->readWeights("conv_mnist/simple_conv_mnist_batches");
 
-	m->fit(train_images, train_labels, 100, test_images, test_labels);
+	m->fit(train_images, train_labels, 100, test_images, test_labels, true);
 
 	m->run(test_images);
 	float* output = y->getData();
