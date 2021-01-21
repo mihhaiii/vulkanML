@@ -77,7 +77,7 @@ public:
 
 	virtual void randomWeightInit() {}
 	virtual void backprop() {}
-	virtual void backprop(Tensor* ground_truth, int offset) {}
+	virtual void backprop(Tensor* ground_truth) {}
 
 	virtual ~Layer()
 	{
@@ -290,7 +290,7 @@ public:
 	virtual void forward();
 	Tensor* getOutputTensor() { return m_output; }
 
-	virtual void backprop(Tensor* ground_truth, int offset);
+	virtual void backprop(Tensor* ground_truth);
 
 private:
 	Tensor* m_input;

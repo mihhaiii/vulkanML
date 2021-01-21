@@ -40,17 +40,17 @@ void vulkan_operator_softmax(vuh::Array<float>* inputs, vuh::Array<float>* outpu
 	program.grid(numGroups).spec(groupSize)({ batch_size, sample_size }, *inputs, *outputs);
 }
 
-void vulkan_operator_softmax_backprop(vuh::Array<float>* derivatives, vuh::Array<float>* outputs, vuh::Array<float>* ground_truth, int ground_truth_offset, int batch_size, int sample_size)
+void vulkan_operator_softmax_backprop(vuh::Array<float>* derivatives, vuh::Array<float>* outputs, vuh::Array<float>* ground_truth, int batch_size, int sample_size)
 {
 	using Specs = vuh::typelist<uint32_t>;
 	struct Params {
-		int batch_size, sample_size, ground_truth_offset;
+		int batch_size, sample_size;
 	};
 	const int groupSize = 1024;
 	const int numGroups = (batch_size + groupSize - 1) / groupSize;
 
 	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "softmax_backprop.spv");
-	program.grid(numGroups).spec(groupSize)({ batch_size, sample_size, ground_truth_offset }, *derivatives, *outputs, *ground_truth);
+	program.grid(numGroups).spec(groupSize)({ batch_size, sample_size }, *derivatives, *outputs, *ground_truth);
 }
 
 

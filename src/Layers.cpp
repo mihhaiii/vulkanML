@@ -266,7 +266,7 @@ void FCLayer::backprop()
 	}
 	else if (m_device == DEVICE_VULKAN) {
 		vulkan_operator_FC_backprop(m_input->getDeviceData(), m_weights->getDeviceData(), m_biases->getDeviceData(),
-			m_derivatives->getDeviceData(), prev_derivatives->getDeviceData(), m_output->getDeviceData(), m_numNeuronsLastLayer, m_numNeurons, m_batch_size, m_applyRelu, m_learning_rate);
+			m_derivatives->getDeviceData(), prev_derivatives ? prev_derivatives->getDeviceData() : nullptr, m_output->getDeviceData(), m_numNeuronsLastLayer, m_numNeurons, m_batch_size, m_applyRelu, m_learning_rate);
 	}
 }
 
@@ -506,7 +506,7 @@ void SoftmaxLayer::forward()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void SoftmaxLayer::backprop(Tensor* ground_truth, int offset)
+void SoftmaxLayer::backprop(Tensor* ground_truth)
 {
 	// assume loss = sparse categorical cross entropy and ground_truth format is NOT one-hot
 	Tensor* derivatives = m_input->getParentLayer()->getDerivativesTensor();
@@ -517,12 +517,12 @@ void SoftmaxLayer::backprop(Tensor* ground_truth, int offset)
 		float inv_batch_size = 1.f / m_batch_size;
 		for (int b = 0; b < m_batch_size; b++) {
 			for (int i = 0; i < sample_size; i++) {
-					derivatives->at({ b,i }) += inv_batch_size * (m_output->at({ b, i }) - (round(ground_truth->getData()[offset + b]) == i ? 1 : 0));
+					derivatives->at({ b,i }) += inv_batch_size * (m_output->at({ b, i }) - (round(ground_truth->getData()[b]) == i ? 1 : 0));
 			}
 		}
 	}
 	else if (m_device == EnumDevice::DEVICE_VULKAN) {
-		vulkan_operator_softmax_backprop(derivatives->getDeviceData(), m_output->getDeviceData(), ground_truth->getDeviceData(), offset, m_batch_size, sample_size);
+		vulkan_operator_softmax_backprop(derivatives->getDeviceData(), m_output->getDeviceData(), ground_truth->getDeviceData(), m_batch_size, sample_size);
 	}
 }
 

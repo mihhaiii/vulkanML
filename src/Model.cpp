@@ -1,6 +1,7 @@
 #include "Model.h"
 #include "OperatorFunctionInterface.h"
 #include <time.h>
+#include "TensorUtils.h"
 
 Model::Model(Tensor* input, Tensor* output, EnumDevice device)
 	: m_device(device),
@@ -41,8 +42,7 @@ Tensor* Model::run(float* inputData, const int size, bool training)
 {
 	clock_t start = clock();
 	assert(m_inputs.size() == 1);
-	batch_size = size / m_inputs[0]->getSampleSize();
-	setBatchSize(training);
+	setBatchSize(size / m_inputs[0]->getSampleSize(), training);
 	float t1 = (float)(clock() - start) / CLOCKS_PER_SEC;
 	start = clock();
 	m_inputs[0]->setData(inputData, size);
@@ -61,11 +61,23 @@ Tensor* Model::run(std::vector<float>& input, bool training)
 	return run(&input[0], input.size(), training);
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//Tensor* Model::run(Tensor* inputTensor, bool training)
+//{
+//	return run(inputTensor->getData(), inputTensor->getSize(), training);
+//}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Tensor* Model::run(Tensor* inputTensor, bool training)
 {
-	return run(inputTensor->getData(), inputTensor->getSize(), training);
+	assert(m_inputs.size() == 1);
+	assert(inputTensor->getSampleSize() == m_inputs[0]->getSampleSize());
+	setBatchSize(inputTensor->getShape()[0], training);
+	inputTensor->setDevice(m_device);
+	m_inputs[0]->shallowCopy(inputTensor);
+	return run();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -85,19 +97,21 @@ Tensor* Model::run(std::vector<std::vector<float>>& inputs)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Model::setBatchSize(bool training)
+void Model::setBatchSize(float batch_size, bool training)
 {
+	m_batch_size = batch_size;
 	for (Layer* l : sortedLayers) {
-		l->setBatchSize(batch_size, training);
+		l->setBatchSize(m_batch_size, training);
 	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Model::setLearningRate()
+void Model::setLearningRate(float learning_rate)
 {
+	m_learning_rate = learning_rate;
 	for (Layer* l : sortedLayers) {
-		l->setLearningRate(learning_rate);
+		l->setLearningRate(m_learning_rate);
 	}
 }
 
@@ -184,51 +198,78 @@ void Model::showInfo()
 
 void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y, bool printAccuracy)
 {
-	int samples = x->getShape().front();
-	assert(samples == y->getShape().front());
-	int sample_size = x->getSize() / samples;
+	const bool has_test_data = test_x != nullptr && test_y != nullptr;
+	int train_samples = x->getShape().front();
+	int test_samples = has_test_data ? test_x->getShape().front() : 0;
+	assert(train_samples == y->getShape().front());
+	assert(!has_test_data || test_samples == test_y->getShape().front());
+	int sample_size = x->getSampleSize();
+	int target_size = y->getSampleSize();
 
-	learning_rate = 0.01;
-	setLearningRate();
-
+	setLearningRate(0.01);
+	setBatchSize(32);
 	randomWeightInit();
 
-	// apply softmax to compute accuracy
-	Tensor* inputArgmax = Input({ m_output->getSampleSize() });
-	Tensor* argmax = Argmax()(inputArgmax);
-	Model* argMaxModel = new Model(inputArgmax, argmax, m_device);
+	assert(train_samples >= m_batch_size);
+	assert(!has_test_data || test_samples >= m_batch_size);
 
-	y->setDevice(m_device);
+	const int train_iterations = (train_samples + m_batch_size - 1) / m_batch_size;
+	const int test_iterations = (test_samples + m_batch_size - 1) / m_batch_size;
+
+	std::vector<std::pair<Tensor*, Tensor*>> train_minibatches(train_iterations);
+	std::vector<std::pair<Tensor*, Tensor*>> test_minibatches;
+	Shape minibatch_x_shape = x->getShape(); minibatch_x_shape[0] = m_batch_size;
+	Shape minibatch_y_shape = y->getShape(); minibatch_y_shape[0] = m_batch_size;
+	for (int i = 0; i < train_iterations; i++)
+	{
+		int firstSampleFromBatch = i * m_batch_size;
+		int lastSampleFromBatch = (std::min)(firstSampleFromBatch + m_batch_size, train_samples);
+		firstSampleFromBatch = lastSampleFromBatch - m_batch_size; // complete the last incomplete batch with previous samples
+
+		train_minibatches[i].first = new Tensor(minibatch_x_shape, m_device);
+		train_minibatches[i].second = new Tensor(minibatch_y_shape, m_device);
+		train_minibatches[i].first->setData(&x->getData()[firstSampleFromBatch * sample_size], m_batch_size * sample_size);
+		train_minibatches[i].second->setData(&y->getData()[firstSampleFromBatch * target_size], m_batch_size * target_size);
+	}
+
+	if (has_test_data) {
+		test_minibatches.resize(test_iterations);
+		for (int i = 0; i < test_iterations; i++)
+		{
+			int firstSampleFromBatch = i * m_batch_size;
+			int lastSampleFromBatch = (std::min)(firstSampleFromBatch + m_batch_size, test_samples);
+			firstSampleFromBatch = lastSampleFromBatch - m_batch_size; // complete the last incomplete batch with previous samples
+
+			test_minibatches[i].first = new Tensor(minibatch_x_shape, m_device);
+			test_minibatches[i].second = new Tensor(minibatch_y_shape, m_device);
+			test_minibatches[i].first->setData(&test_x->getData()[firstSampleFromBatch * sample_size], m_batch_size * sample_size);
+			test_minibatches[i].second->setData(&test_y->getData()[firstSampleFromBatch * target_size], m_batch_size * target_size);
+		}
+	}
+
 	float t1 = 0, t2 = 0, t3 = 0, t4 = 0, t5 = 0;
 	clock_t start;
+
+	Model* argMaxModel = nullptr;
+	if (printAccuracy) {
+		// apply softmax to compute accuracy
+		Tensor* inputArgmax = Input({ m_output->getSampleSize() });
+		Tensor* argmax = Argmax()(inputArgmax);
+		argMaxModel = new Model(inputArgmax, argmax, m_device);
+	}
+
 	for (int e = 0; e < epochs; e++)
-	{
-		start = clock(); // measure only execution time, without data transfer
-
-
-		batch_size = 42;
-		setBatchSize();
-		const int iterations = (samples + batch_size - 1) / batch_size;
-
-		t1 += (float)(clock() - start) / CLOCKS_PER_SEC;
-		
-		
-		for (int iter = 0; iter < iterations; iter++)
+	{	
+		for (int i = 0; i < train_iterations; i++)
 		{
-			int firstSampleFromBatch = iter * batch_size;
-			int lastSampleFromBatch = (std::min)(firstSampleFromBatch + batch_size, samples);
-			int current_batch_size = lastSampleFromBatch - firstSampleFromBatch;
-
 			start = clock();
-
-			Tensor* out = run(&x->getData()[firstSampleFromBatch * sample_size], current_batch_size * sample_size, true);
+			Tensor* out = run(train_minibatches[i].first, true /* training */);
 
 			t2 += (float)(clock() - start) / CLOCKS_PER_SEC;
-
 			start = clock();
 
 			assert(m_output == out);
-			m_output->getParentLayer()->backprop(y, firstSampleFromBatch);
+			m_output->getParentLayer()->backprop(train_minibatches[i].second);
 			t3 += (float)(clock() - start) / CLOCKS_PER_SEC;
 			start = clock();
 			for (int l = sortedLayers.size() - 1; l >= 0; l--)
@@ -241,29 +282,32 @@ void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y
 		}
 		start = clock();
 		if (printAccuracy) {
-			// compute train and test accuracy
-			Tensor* pred_train = run(x);
-			pred_train = argMaxModel->run(pred_train);
-
-			int train_correct_pred = 0, test_correct_pred = 0;
-			float* pred_train_data = pred_train->getData();
-			float* y_data = y->getData();
-			for (int i = 0; i < pred_train->getSize(); i++) {
-				if (pred_train_data[i] == y_data[i])
-					train_correct_pred++;
+			// compute train accuracy
+			int train_correct_pred = 0;
+			for (int i = 0; i < train_iterations; i++)
+			{
+				Tensor* out = run(train_minibatches[i].first);
+				out = argMaxModel->run(out);
+				int eq = CountEqual(out, train_minibatches[i].second); //! on gpu, changes device data of 'out'
+				train_correct_pred += eq;
 			}
+			float train_accuracy = (float)train_correct_pred / (train_iterations * m_batch_size);
+			std::cout << "epoch " << e << "   train accuracy: " << train_accuracy;
 
-			std::cout << "epoch " << e << "   train accuracy: " << (float)train_correct_pred / pred_train->getSize();
-
-			Tensor* pred_test = run(test_x);
-			pred_test = argMaxModel->run(pred_test);
-			float* pred_test_data = pred_test->getData();
-			float* test_y_data = test_y->getData();
-			for (int i = 0; i < pred_test->getSize(); i++) {
-				if (pred_test_data[i] == test_y_data[i])
-					test_correct_pred++;
+			// compute test accuracy
+			if (has_test_data) {
+				int test_correct_pred = 0;
+				for (int i = 0; i < test_iterations; i++)
+				{
+					Tensor* out = run(test_minibatches[i].first);
+					out = argMaxModel->run(out);
+					int eq = CountEqual(out, test_minibatches[i].second);
+					test_correct_pred += eq;
+				}
+				float test_accuracy = (float)test_correct_pred / (test_iterations * m_batch_size);
+				std::cout << "   test accuracy: " << test_accuracy; 
 			}
-			std::cout << "   test accuracy: " << (float)test_correct_pred / pred_test->getSize() << "\n";
+			std::cout << "\n";
 		}
 		t5 += (float)(clock() - start) / CLOCKS_PER_SEC;
 

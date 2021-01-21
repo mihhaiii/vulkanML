@@ -284,6 +284,26 @@ void Tensor::setData(float* data, int size)
 	}
 }
 
+void Tensor::shallowCopy(Tensor* fromTensor)
+{
+	assert(m_isTensorView);
+	m_data = fromTensor->m_data;
+	m_deviceData = fromTensor->m_deviceData;
+}
+
+Tensor* Tensor::getBatch(int startIdx, int size)
+{
+	Shape shape = m_shape;
+	shape[0] = size;
+	int sample_size = getSampleSize();
+	int offset = startIdx * sample_size;
+	
+	Tensor* batch = new Tensor(shape, m_device, true);
+	batch->setIsTensorView();
+	batch->m_data = m_data + offset;
+	return batch;
+}
+
 float* Tensor::getData() {
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device & DEVICE_CPU)

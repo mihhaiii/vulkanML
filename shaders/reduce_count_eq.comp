@@ -1,0 +1,39 @@
+#version 440
+
+layout(local_size_x_id = 0) in;             // workgroup size set with specialization constant
+layout(push_constant) uniform Parameters {  // push constants
+	int numInputs;
+} params;
+
+layout(std430, binding = 0) buffer lay0 { float t1[]; }; // array parameters
+layout(std430, binding = 1) buffer lay1 { float t2[]; }; // array parameters
+layout(std430, binding = 2) buffer lay2 { float countPerGroup[]; }; // array parameters
+
+void main(){
+   const uint globalId = gl_GlobalInvocationID.x; 
+   const uint localId = gl_LocalInvocationID.x;
+   const uint groupSize = gl_WorkGroupSize.x;
+   const uint groupId = gl_WorkGroupID.x;
+   
+   if(globalId >= params.numInputs){
+      return;
+   }
+   
+   if (t1[globalId] == t2[globalId])
+	t1[globalId] = 1;
+   else 
+	t1[globalId] = 0;
+	
+   barrier();
+   
+   for (uint v = groupSize; v >= 1; v /= 2){
+		if (localId < v && globalId + v < params.numInputs)
+			t1[globalId] += t1[globalId + v];
+		
+		barrier();
+   }
+   
+   if (localId == 0){
+		countPerGroup[groupId] = t1[globalId];
+   }
+}

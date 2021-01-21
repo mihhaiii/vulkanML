@@ -13,7 +13,6 @@ layout(std430, binding = 0) buffer lay0 { float inputs[]; }; // array parameters
 layout(std430, binding = 1) buffer lay1 { float weights[]; }; // array parameters
 layout(std430, binding = 2) buffer lay2 { float biases[]; }; // array parameters
 layout(std430, binding = 3) buffer lay3 { float derivatives[]; }; // array parameters
-layout(std430, binding = 4) buffer lay4 { float prev_derivatives[]; }; // array parameters
 
 void main(){
    const uint globalId = gl_GlobalInvocationID.x; 

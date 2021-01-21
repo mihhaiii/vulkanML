@@ -1,6 +1,7 @@
 #include "TensorUtils.h"
 #include "MemoryManager.h"
 #include "Tensor.h"
+#include "vulkan_operator_reduce_count_eq.h"
 
 std::vector<Tensor*> split(Tensor* t, const std::vector<int>& dims, int axis)
 {
@@ -53,4 +54,25 @@ void tensor_exp(Tensor* t) {
 	for (int i = 0; i < t->getSize(); i++) {
 		t->getData()[i] = exp(t->getData()[i]);
 	}
+}
+
+int CountEqual(Tensor* t1, Tensor* t2)
+{
+	assert(t1->getDevice() == t2->getDevice());
+	int size = t1->getSize();
+	assert(size == t2->getSize());
+	if (t1->getDevice() == DEVICE_CPU) {
+		int res = 0;
+		float* data1 = t1->getData();
+		float* data2 = t2->getData();
+		for (int i = 0; i < size; i++) {
+			res += (data1[i] == data2[i]);
+		}
+		return res;
+	}
+	else if (t1->getDevice() == DEVICE_VULKAN) {
+		// ! changes device data of t1
+		return vulkan_operator_reduce_count_eq(t1->getDeviceData(), t2->getDeviceData(), size);
+	}
+	return 0;
 }

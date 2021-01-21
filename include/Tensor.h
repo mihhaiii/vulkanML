@@ -47,6 +47,8 @@ public:
 	void readData(FILE* file);
 
 	void setData(float* data, int size);
+	void shallowCopy(Tensor* fromTensor);
+	Tensor* getBatch(int startIdx, int size);
 
 	float* getData();
 	vuh::Array<float>* getDeviceData() { return m_deviceData; }

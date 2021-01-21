@@ -536,7 +536,7 @@ void test_simle_mnist_model_with_batches()
 
 	//m->readWeights("conv_mnist/simple_conv_mnist_batches");
 
-	m->fit(train_images, train_labels, 100, test_images, test_labels, true);
+	m->fit(train_images, train_labels, 100, test_images, test_labels, false);
 
 	m->run(test_images);
 	float* output = y->getData();
@@ -549,8 +549,8 @@ void test_simle_mnist_model_with_batches()
 	int correct = 0;
 	assert(output1->getSize() == test_labels->getSize());
 	for (int i = 0; i < output1->getSize(); i++) {
-		std::cout << "\n";
-		std::cout << output1->getData()[i] << " " << test_labels->getData()[i];
+		//std::cout << "\n";
+		//std::cout << output1->getData()[i] << " " << test_labels->getData()[i];
 		if (output1->getData()[i] == test_labels->getData()[i]) {
 			correct++;
 		}

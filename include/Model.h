@@ -30,15 +30,15 @@ private:
 	void randomWeightInit();
 	void topologicalSort();
 	void dfs(Layer* l, std::set<Layer*>& visited);
-	void setBatchSize(bool training = false);
-	void setLearningRate();
+	void setBatchSize(float batch_size, bool training = false);
+	void setLearningRate(float learning_rate);
 
 private:
 	std::vector<Tensor*> m_inputs;
 	Tensor* m_output;
 	std::vector<Layer*> sortedLayers;
 
-	int batch_size;
-	float learning_rate;
+	int m_batch_size;
+	float m_learning_rate;
 	EnumDevice m_device;
 };
