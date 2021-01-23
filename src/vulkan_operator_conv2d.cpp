@@ -41,3 +41,21 @@ void vulkan_operator_conv2d(vuh::Array<float>* inputImage, vuh::Array<float>* we
 	if (outTime)
 		*outTime = (float)(clock() - start) / CLOCKS_PER_SEC;
 }
+
+void vulkan_operator_conv2d_backprop(vuh::Array<float>* inputImage, vuh::Array<float>* weights, vuh::Array<float>* biases, int batch_size, int h, int w, int c, int filters, int size, int stride, int padding, int out_h, int out_w, bool useBias, vuh::Array<float>* outputImage, float* outTime)
+{
+	using Specs = vuh::typelist<uint32_t>;
+	struct Params {
+		int batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias;
+	};
+	const int groupSize = 32;
+	const int numGroups = (filters + groupSize - 1) / groupSize;
+
+	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "conv2d.spv");
+
+	clock_t start = clock(); // measure only execution time, without data transfer
+	program.grid(numGroups).spec(groupSize);
+	program({ batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, (int)useBias }, *inputImage, *weights, *biases, *outputImage);
+	if (outTime)
+		*outTime = (float)(clock() - start) / CLOCKS_PER_SEC;
+}

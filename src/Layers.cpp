@@ -99,10 +99,18 @@ void Conv2dLayer::readBiases(FILE* file) {
 	}
 	else if (m_device == DEVICE_VULKAN) {
 		vulkan_operator_conv2d(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), m_batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
-		outputImage->setDevice(DEVICE_CPU);
-		outputImage->setDevice(DEVICE_VULKAN);
 	}
 }
+
+ void Conv2dLayer::backprop()
+ {
+	 if (m_device == DEVICE_CPU) {
+		 operator_conv2d_cpu_backprop(inputImage->getData(), weigths->getData(), biases->getData(), m_batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getData(), m_derivatives->getData(), inputImage->getParentLayer()->getDerivativesTensor()->getData());
+	 }
+	 else if (m_device == DEVICE_VULKAN) {
+		 vulkan_operator_conv2d_backprop(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), m_batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
+	 }
+ }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -276,17 +284,18 @@ void ReLULayer::init(const std::vector<Tensor*>& inputs)
 {
 	assert(inputs.size() == 1);
 	m_input = inputs[0];
+	m_output = createOwnedTensor(m_input->getShape());
 }
 
  void ReLULayer::forward() {
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == EnumDevice::DEVICE_CPU) {
 		for (int i = 0; i < m_input->getSize(); i++) {
-			m_input->getData()[i] = (std::max)(m_input->getData()[i], 0.f);
+			m_output->getData()[i] = (std::max)(m_input->getData()[i], 0.f);
 		}
 	}
 	else if (m_device == EnumDevice::DEVICE_VULKAN) {
-		vulkan_operator_relu(m_input->getDeviceData(), m_input->getDeviceData(), m_input->getSize());
+		vulkan_operator_relu(m_input->getDeviceData(), m_output->getDeviceData(), m_input->getSize());
 	}
 }
 
@@ -297,8 +306,13 @@ void ReLULayer::init(const std::vector<Tensor*>& inputs)
 	 assert(m_derivatives);
 	 Tensor* prev_derivatives = m_input->getParentLayer()->getDerivativesTensor();
 
-	 for (int i = 0; i < m_input->getSize(); i++) {
-		 prev_derivatives->getData()[i] = m_input->getData()[i] < 0 ? 0 : m_derivatives->getData()[i];
+	 if (m_device == DEVICE_CPU) {
+		 for (int i = 0; i < m_input->getSize(); i++) {
+			 prev_derivatives->getData()[i] = m_input->getData()[i] < 0 ? 0 : m_derivatives->getData()[i];
+		 }
+	 }
+	 else if (m_device == DEVICE_VULKAN) {
+		 vulkan_operator_relu_backprop(m_input->getDeviceData(), m_derivatives->getDeviceData(), prev_derivatives->getDeviceData(), m_input->getSize());
 	 }
  }
 

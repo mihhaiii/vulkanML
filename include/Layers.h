@@ -122,6 +122,7 @@ public:
 	void readBiases(FILE* file);
 	bool getUseBias() { return useBias; }
 	virtual void forward();
+	virtual void backprop();
 	Tensor* getOutputTensor() { return outputImage; }
 
 private:
@@ -249,11 +250,12 @@ public:
 	}
 
 	virtual void forward();
-	Tensor* getOutputTensor() { return m_input; }
+	Tensor* getOutputTensor() { return m_output; }
 	virtual void backprop();
 
 private:
 	Tensor* m_input;
+	Tensor* m_output;
 };
 
 

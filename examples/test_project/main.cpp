@@ -526,13 +526,13 @@ void test_simle_mnist_model_with_batches()
 	}
 
 	Tensor *y;
-	y = Dense(64, true)(input);
-	//y = ReLU()(y);
+	y = Dense(64)(input);
+	y = ReLU()(y);
 	y = Dense(10)(y);
 	y = Softmax()(y);
 	//y = Argmax()(y);
 
-	Model* m = new Model(input, y, EnumDevice::DEVICE_CPU);
+	Model* m = new Model(input, y, EnumDevice::DEVICE_VULKAN);
 
 	//m->readWeights("conv_mnist/simple_conv_mnist_batches");
 

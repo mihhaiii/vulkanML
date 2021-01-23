@@ -36,3 +36,28 @@ void operator_conv2d_cpu(float* inputImage, float* weights, float* biases, int b
 	}
 	
 }
+
+void operator_conv2d_cpu_backprop(float* inputImage, float* weights, float* biases, int batch_size, int h, int w, int c, int filters, int size, int stride, int padding, int out_h, int out_w, bool useBias, float* outputImage, float* derivatives, float* prev_derivatives)
+{
+	// input image is flattened version of   h x w x c
+	// weights is flattened version of	size x size x c x filters
+	// biases has a size of filters
+	// output image is flattened version of out_h x out_w x filters
+	// prev_derivatives is the same as input  h x w x c
+	// derivatives is the same as output out_h x out_w x filters
+
+	// compute input image derivatives
+	int h_offset = -padding / 2;
+	int w_offset = -padding / 2;
+	for (int b = 0; b < batch_size; b++) {
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				for (int k = 0; k < c; k++) {
+					prev_derivatives[b * h * w * c + i * w * c + j * c + k] = 0;
+					int startI = i / stride - size + 1;
+					int startJ = j / stride - size + 1;
+				}
+			}
+		}
+	}
+}
