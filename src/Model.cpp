@@ -2,6 +2,7 @@
 #include "OperatorFunctionInterface.h"
 #include <time.h>
 #include "TensorUtils.h"
+#include "GlobalTimeTracker.h"
 
 Model::Model(Tensor* input, Tensor* output, EnumDevice device)
 	: m_device(device),
@@ -260,6 +261,8 @@ void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y
 
 	for (int e = 0; e < epochs; e++)
 	{	
+		clock_t epochStartTime = clock();
+		GlobalTimeTracker::getInstance().reset();
 		for (int i = 0; i < train_iterations; i++)
 		{
 			start = clock();
@@ -310,8 +313,11 @@ void Model::fit(Tensor* x, Tensor* y, int epochs, Tensor* test_x, Tensor* test_y
 			std::cout << "\n";
 		}
 		t5 += (float)(clock() - start) / CLOCKS_PER_SEC;
-
+		
+		float epochDuration = (float)(clock() - epochStartTime) / CLOCKS_PER_SEC;
+		std::cout << "epoch duration: " << epochDuration << "s\n";
 		std::cout << t1 << " " << t2 << " " << t3 << " " << t4 << " " << t5 << "\n";
+		GlobalTimeTracker::getInstance().show();
 	}
 }
 

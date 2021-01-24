@@ -12,6 +12,7 @@
 #include "vulkan_operator_concatenate.h"
 #include "operator_softmax_cpu.h"
 #include "vulkan_operator_softmax.h"
+#include "GlobalTimeTracker.h"
 
 Conv2dLayer::Conv2dLayer(int _filters, int _size, int _stride, const std::string& _padding, bool _useBias)
 	: filters(_filters), size(_size), stride(_stride), useBias(_useBias)
@@ -92,6 +93,7 @@ void Conv2dLayer::readBiases(FILE* file) {
 }
 
  void Conv2dLayer::forward() {
+	SCOPE_TIMER("conv_2d_forward");
 	assert(m_isInputLinked);
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == DEVICE_CPU) {
@@ -104,12 +106,24 @@ void Conv2dLayer::readBiases(FILE* file) {
 
  void Conv2dLayer::backprop()
  {
+	 SCOPE_TIMER("conv_2d_backprop");
+	 Tensor* prev_derivatives = inputImage->getParentLayer()->getDerivativesTensor();
 	 if (m_device == DEVICE_CPU) {
-		 operator_conv2d_cpu_backprop(inputImage->getData(), weigths->getData(), biases->getData(), m_batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getData(), m_derivatives->getData(), inputImage->getParentLayer()->getDerivativesTensor()->getData());
+		 operator_conv2d_cpu_backprop(inputImage->getData(), weigths->getData(), biases->getData(), m_batch_size, h, w, c, filters, size, stride, padding, 
+			 out_h, out_w, useBias, m_learning_rate, outputImage->getData(), m_derivatives->getData(), prev_derivatives ? prev_derivatives->getData() : nullptr);
 	 }
 	 else if (m_device == DEVICE_VULKAN) {
-		 vulkan_operator_conv2d_backprop(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), m_batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias, outputImage->getDeviceData());
+		 vulkan_operator_conv2d_backprop(inputImage->getDeviceData(), weigths->getDeviceData(), biases->getDeviceData(), m_batch_size, h, w, c, filters, size, stride, padding, 
+			 out_h, out_w, useBias, m_learning_rate, outputImage->getDeviceData(), m_derivatives->getDeviceData(), prev_derivatives ? prev_derivatives->getDeviceData() : nullptr);
 	 }
+ }
+
+ void Conv2dLayer::randomWeightInit()
+ {
+	 float standardDeviation = sqrt(2. / (m_batch_size * h * w));
+	 float mean = 0.f;
+	 weigths->randomWeightInit(mean, standardDeviation);
+	 biases->randomWeightInit(mean, standardDeviation);
  }
 
 
@@ -146,12 +160,26 @@ int MaxPooling2dLayer::getParamCount()
 }
 
 void MaxPooling2dLayer::forward() {
+	SCOPE_TIMER("max_pool_forward");
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == DEVICE_CPU) {
 		operator_maxpool_cpu(m_inputImage->getData(), m_batch_size, h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getData());
 	}
 	else if (m_device == DEVICE_VULKAN) {
 		vulkan_operator_maxpool(m_inputImage->getDeviceData(), m_batch_size, h, w, c, size, stride, padding, out_h, out_w, m_outputImage->getDeviceData());
+	}
+}
+
+void MaxPooling2dLayer::backprop() {
+	SCOPE_TIMER("max_pool_backprop");
+	assert(m_device != DEVICE_UNSPECIFIED);
+	if (m_device == DEVICE_CPU) {
+		operator_maxpool_cpu_backprop(m_inputImage->getData(), m_batch_size, h, w, c, size, stride, padding, out_h, out_w, 
+			m_outputImage->getData(), m_derivatives->getData(), m_inputImage->getParentLayer()->getDerivativesTensor()->getData());
+	}
+	else if (m_device == DEVICE_VULKAN) {
+		vulkan_operator_maxpool_backprop(m_inputImage->getDeviceData(), m_batch_size, h, w, c, size, stride, padding, out_h, out_w,
+			m_outputImage->getDeviceData(), m_derivatives->getDeviceData(), m_inputImage->getParentLayer()->getDerivativesTensor()->getDeviceData());
 	}
 }
 
@@ -202,6 +230,7 @@ void FCLayer::readBiases(FILE* file) {
 }
 
 void FCLayer::forward() {
+	SCOPE_TIMER("fc_forward");
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == DEVICE_CPU) {
 		operator_FC_cpu(m_input->getData(), m_weights->getData(), m_biases->getData(), m_output->getData(),
@@ -225,6 +254,7 @@ void FCLayer::randomWeightInit()
 
 void FCLayer::backprop()
 {
+	SCOPE_TIMER("fc_backprop");
 	assert(m_derivatives);
 	Tensor* prev_derivatives = m_input->getParentLayer()->getDerivativesTensor();
 
@@ -288,6 +318,7 @@ void ReLULayer::init(const std::vector<Tensor*>& inputs)
 }
 
  void ReLULayer::forward() {
+	SCOPE_TIMER("relu_forward");
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == EnumDevice::DEVICE_CPU) {
 		for (int i = 0; i < m_input->getSize(); i++) {
@@ -303,6 +334,7 @@ void ReLULayer::init(const std::vector<Tensor*>& inputs)
 
  void ReLULayer::backprop()
  {
+	 SCOPE_TIMER("relu_backprop");
 	 assert(m_derivatives);
 	 Tensor* prev_derivatives = m_input->getParentLayer()->getDerivativesTensor();
 
@@ -509,6 +541,7 @@ void SoftmaxLayer::init(const std::vector<Tensor*>& inputs)
 
 void SoftmaxLayer::forward()
 {
+	SCOPE_TIMER("softmax_forward");
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == EnumDevice::DEVICE_CPU) {
 		operator_softmax_cpu(m_input->getData(), m_output->getData(), m_batch_size, m_input->getSampleSize());
@@ -522,6 +555,7 @@ void SoftmaxLayer::forward()
 
 void SoftmaxLayer::backprop(Tensor* ground_truth)
 {
+	SCOPE_TIMER("softmax_backprop");
 	// assume loss = sparse categorical cross entropy and ground_truth format is NOT one-hot
 	Tensor* derivatives = m_input->getParentLayer()->getDerivativesTensor();
 	int sample_size = derivatives->getSampleSize();

@@ -4,7 +4,6 @@
 #include <iostream>
 #include "vuh/array.hpp"
 
-
 using Shape = std::vector<int>;
 
 int getShapeSize(const Shape& shape);

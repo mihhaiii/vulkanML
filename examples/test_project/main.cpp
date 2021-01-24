@@ -492,7 +492,7 @@ void test_simle_mnist_model_with_batches()
 {
 
 	namespace fs = std::filesystem;
-	Tensor* input = Input({ 28 * 28 * 1 });
+	Tensor* input = Input({ 28, 28, 1 });
 
 	std::vector<std::pair<std::string, int>> data;
 	for (int digit = 9; digit >= 0; digit--)
@@ -525,26 +525,42 @@ void test_simle_mnist_model_with_batches()
 		label = data[i].second;
 	}
 
-	Tensor *y;
-	y = Dense(64)(input);
-	y = ReLU()(y);
-	y = Dense(10)(y);
-	y = Softmax()(y);
+	Tensor *x;
+	/*x = Dense(64)(input);
+	x = ReLU()(x);
+	x = Dense(10)(x);
+	x = Softmax()(x);*/
+
+	x = Conv2D(32, 3)(input);
+	x = ReLU()(x);
+	x = MaxPool2D(2, 2)(x);
+
+	x = Conv2D(64, 3)(x);
+	x = ReLU()(x);
+	x = MaxPool2D(2, 2)(x);
+
+	x = Conv2D(64, 3)(x);
+	x = ReLU()(x);
+
+	x = Dense(64)(x);
+	x = ReLU()(x);
+	x = Dense(10)(x);
+	x = Softmax()(x);
 	//y = Argmax()(y);
 
-	Model* m = new Model(input, y, EnumDevice::DEVICE_VULKAN);
+	Model* m = new Model(input, x, EnumDevice::DEVICE_VULKAN);
 
 	//m->readWeights("conv_mnist/simple_conv_mnist_batches");
 
-	m->fit(train_images, train_labels, 100, test_images, test_labels, false);
+	m->fit(train_images, train_labels, 100, test_images, test_labels, true);
 
 	m->run(test_images);
-	float* output = y->getData();
+	float* output = x->getData();
 
 	Tensor* input1 = Input({ 10 });
 	Tensor* output1 = Argmax()(input1);
 	Model m1(input1, output1, DEVICE_CPU);
-	m1.run(y);
+	m1.run(x);
 
 	int correct = 0;
 	assert(output1->getSize() == test_labels->getSize());

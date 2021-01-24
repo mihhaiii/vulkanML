@@ -123,6 +123,7 @@ public:
 	bool getUseBias() { return useBias; }
 	virtual void forward();
 	virtual void backprop();
+	virtual void randomWeightInit();
 	Tensor* getOutputTensor() { return outputImage; }
 
 private:
@@ -151,6 +152,7 @@ public:
 	virtual void init(const std::vector<Tensor*>& inputs) override;
 	virtual int getParamCount() override;
 	virtual void forward();
+	virtual void backprop();
 	Tensor* getOutputTensor() { return m_outputImage; }
 
 private:
