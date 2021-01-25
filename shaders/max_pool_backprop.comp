@@ -1,6 +1,6 @@
 #version 440
 
-layout(local_size_x_id = 0) in; // workgroup dimensions specialization constants
+layout(local_size_x_id = 0, local_size_y_id = 1, local_size_z_id = 2) in; // workgroup dimensions specialization constants
 layout(push_constant) uniform Parameters {  // push constants
 	int batch_size, h, w, c, size, stride, padding, out_h, out_w;
 } p;
@@ -10,41 +10,38 @@ layout(std430, binding = 1) buffer lay1 { float derivatives[]; }; // array param
 layout(std430, binding = 2) buffer lay2 { float prev_derivatives[]; }; // array parameters
 
 void main(){
-   const uint k = gl_GlobalInvocationID.x; 
-   if(k >= p.c){
-      return;
-   }
-
-	for(int b = 0; b < p.batch_size; b++){
-		for (int i = 0; i < p.h; i++){
-			for (int j = 0; j < p.w; j++){
-					prev_derivatives[b * p.h * p.w * p.c + i * p.w * p.c + j * p.c + k] = 0;
-			}
-		}
-	}	
+   const int i = int(gl_GlobalInvocationID.x);
+	if(i >= p.out_h){
+	  return;
+	}
+	const int j = int(gl_GlobalInvocationID.y);
+	if(j >= p.out_w){
+	  return;
+	}
+	const uint k = gl_GlobalInvocationID.z;
+	if(k >= p.c){
+	  return;
+	}
 
 	int h_offset = -p.padding / 2;
 	int w_offset = -p.padding / 2;
 	for (int b = 0; b < p.batch_size; b++) {
-		for (int i = 0; i < p.out_h; i++) {
-			for (int j = 0; j < p.out_w; j++) {
-					int startI = i * p.stride + h_offset;
-					int startJ = j * p.stride + w_offset;
-					float maxValue = -1e9;
-					int max_ii = 0, max_jj = 0;
-					for (int ii = max(startI, 0); ii < min(startI + p.size, p.h); ii++) {
-						for (int jj = max(startJ, 0); jj < min(startJ + p.size, p.w); jj++) {
-							float currentValue = inputImage[b * p.h * p.w * p.c + ii * p.w * p.c + jj * p.c + k];
-							if (currentValue > maxValue){
-								maxValue = currentValue;
-								max_ii = ii;
-								max_jj = jj;
-							}								
-						}
-					}
-					prev_derivatives[b * p.h * p.w * p.c + max_ii * p.w * p.c + max_jj * p.c + k] = derivatives[b * p.out_h * p.out_w * p.c + i * p.out_w * p.c + j * p.c + k];
+		int startI = i * p.stride + h_offset;
+		int startJ = j * p.stride + w_offset;
+		float maxValue = -1e9;
+		int max_ii = 0, max_jj = 0;
+		for (int ii = max(startI, 0); ii < min(startI + p.size, p.h); ii++) {
+			for (int jj = max(startJ, 0); jj < min(startJ + p.size, p.w); jj++) {
+				float currentValue = inputImage[b * p.h * p.w * p.c + ii * p.w * p.c + jj * p.c + k];
+				prev_derivatives[b * p.h * p.w * p.c + ii * p.w * p.c + jj * p.c + k] = 0;
+				if (currentValue > maxValue){
+					maxValue = currentValue;
+					max_ii = ii;
+					max_jj = jj;
+				}								
 			}
 		}
+		prev_derivatives[b * p.h * p.w * p.c + max_ii * p.w * p.c + max_jj * p.c + k] = derivatives[b * p.out_h * p.out_w * p.c + i * p.out_w * p.c + j * p.c + k];
 	}
 
 	

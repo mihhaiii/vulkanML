@@ -588,6 +588,7 @@ void ArgmaxLayer::init(const std::vector<Tensor*>& inputs)
 
 void ArgmaxLayer::forward()
 {
+	SCOPE_TIMER("argmax_forward");
 	assert(m_device != DEVICE_UNSPECIFIED);
 	if (m_device == EnumDevice::DEVICE_CPU) {
 		int sample_size = m_input->getSampleSize();

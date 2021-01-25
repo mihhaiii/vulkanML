@@ -2,6 +2,7 @@
 #include "MemoryManager.h"
 #include "Tensor.h"
 #include "vulkan_operator_reduce_count_eq.h"
+#include "GlobalTimeTracker.h"
 
 std::vector<Tensor*> split(Tensor* t, const std::vector<int>& dims, int axis)
 {
@@ -58,10 +59,11 @@ void tensor_exp(Tensor* t) {
 
 int CountEqual(Tensor* t1, Tensor* t2)
 {
+	SCOPE_TIMER("count_equal");
 	assert(t1->getDevice() == t2->getDevice());
 	int size = t1->getSize();
 	assert(size == t2->getSize());
-	if (t1->getDevice() == DEVICE_CPU) {
+	if (true /*t1->getDevice() == DEVICE_CPU*/) {
 		int res = 0;
 		float* data1 = t1->getData();
 		float* data2 = t2->getData();

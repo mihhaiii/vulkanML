@@ -73,11 +73,14 @@ Tensor* Model::run(std::vector<float>& input, bool training)
 
 Tensor* Model::run(Tensor* inputTensor, bool training)
 {
-	assert(m_inputs.size() == 1);
-	assert(inputTensor->getSampleSize() == m_inputs[0]->getSampleSize());
-	setBatchSize(inputTensor->getShape()[0], training);
-	inputTensor->setDevice(m_device);
-	m_inputs[0]->shallowCopy(inputTensor);
+	{
+		SCOPE_TIMER("pre-run");
+		assert(m_inputs.size() == 1);
+		assert(inputTensor->getSampleSize() == m_inputs[0]->getSampleSize());
+		setBatchSize(inputTensor->getShape()[0], training);
+		inputTensor->setDevice(m_device);
+		m_inputs[0]->shallowCopy(inputTensor);
+	}
 	return run();
 }
 

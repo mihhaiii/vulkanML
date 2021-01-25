@@ -26,17 +26,21 @@ void vulkan_operator_conv2d(float* inputImage, float* weights, float* biases, in
 
 void vulkan_operator_conv2d(vuh::Array<float>* inputImage, vuh::Array<float>* weights, vuh::Array<float>* biases, int batch_size, int h, int w, int c, int filters, int size, int stride, int padding, int out_h, int out_w, bool useBias, vuh::Array<float>* outputImage, float* outTime)
 {
-	using Specs = vuh::typelist<uint32_t>;
+	using Specs = vuh::typelist<uint32_t, uint32_t, uint32_t>;
 	struct Params {
 		int batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias;
 	};
-	const int groupSize = 32;
-	const int numGroups = (filters + groupSize - 1) / groupSize;
+	const int groupSizeX = 8;
+	const int groupSizeY = 8;
+	const int groupSizeZ = 16;
+	const int numGroupsX = (out_h + groupSizeX - 1) / groupSizeX;
+	const int numGroupsY = (out_w + groupSizeY - 1) / groupSizeY;
+	const int numGroupsZ = (filters + groupSizeZ - 1) / groupSizeZ;
 
 	static auto program = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "conv2d.spv");
 
 	clock_t start = clock(); // measure only execution time, without data transfer
-	program.grid(numGroups).spec(groupSize);
+	program.grid(numGroupsX, numGroupsY, numGroupsZ).spec(groupSizeX, groupSizeY, groupSizeZ);
 	program({ batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, (int)useBias }, *inputImage, *weights, *biases, *outputImage);
 	if (outTime)
 		*outTime = (float)(clock() - start) / CLOCKS_PER_SEC;
@@ -46,24 +50,33 @@ void vulkan_operator_conv2d_backprop(vuh::Array<float>* inputImage, vuh::Array<f
 	int filters, int size, int stride, int padding, int out_h, int out_w, bool useBias, float learning_rate, vuh::Array<float>* outputImage,
 	vuh::Array<float>* derivatives, vuh::Array<float>* prev_derivatives)
 {
-	using Specs = vuh::typelist<uint32_t>;
+	using Specs = vuh::typelist<uint32_t, uint32_t, uint32_t>;
 	struct Params {
 		int batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, useBias; float learning_rate;
 	};
-	const int groupSize = 32;
-	int numGroups = (c + groupSize - 1) / groupSize;
+	
 
 	if (prev_derivatives) {
+		const int groupSizeX = 8;
+		const int groupSizeY = 8;
+		const int groupSizeZ = 16;
+		const int numGroupsX = (h + groupSizeX - 1) / groupSizeX;
+		const int numGroupsY = (w + groupSizeY - 1) / groupSizeY;
+		const int numGroupsZ = (c + groupSizeZ - 1) / groupSizeZ;
 		// update prev layer derivatives
 		static auto program1 = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "conv2d_backprop_prevLayerDerivatives.spv");
-		program1.grid(numGroups).spec(groupSize);
+		program1.grid(numGroupsX, numGroupsY, numGroupsZ).spec(groupSizeX, groupSizeY, groupSizeZ);
 		program1({ batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, (int)useBias, learning_rate }, * weights, * derivatives, * prev_derivatives);
 
 	}
 
+	const int groupSizeX = 32;
+	const int groupSizeY = 32;
+	int numGroupsX = (c + groupSizeX - 1) / groupSizeX;
+	int numGroupsY = (filters + groupSizeY - 1) / groupSizeY;
 	// update weights
-	numGroups = (filters + groupSize - 1) / groupSize;
-	static auto program2 = vuh::Program<Specs, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "conv2d_backprop_updateWeights.spv");
-	program2.grid(numGroups).spec(groupSize);
+	using Specs1 = vuh::typelist<uint32_t, uint32_t>;
+	static auto program2 = vuh::Program<Specs1, Params>(InstanceManger::getInstance().getDefaultDevice(), SHADERS_LOCATION "conv2d_backprop_updateWeights.spv");
+	program2.grid(numGroupsX, numGroupsY).spec(groupSizeX, groupSizeY);
 	program2({ batch_size, h, w, c, filters, size, stride, padding, out_h, out_w, (int)useBias, learning_rate }, * inputImage, * weights, * biases, * derivatives);
 }
